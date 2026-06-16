@@ -14,7 +14,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const { t, locale, changeLanguage } = useTranslation();
 
-  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
   // User session
   const [user, setUser] = useState(null);

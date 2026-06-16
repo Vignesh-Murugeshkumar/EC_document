@@ -13,7 +13,7 @@ export default function SubscriptionHub() {
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
   useEffect(() => {
     const storedToken = localStorage.getItem("ec_token");

@@ -29,7 +29,7 @@ export default function LoginPage() {
     useRef(null), useRef(null), useRef(null)
   ];
 
-  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
   // Resend OTP countdown timer
   useEffect(() => {
