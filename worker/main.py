@@ -18,6 +18,7 @@ image = (
         "pydantic",
         "langdetect"
     )
+)
 
 app = modal.App(name="ec-validator-worker", image=image)
 

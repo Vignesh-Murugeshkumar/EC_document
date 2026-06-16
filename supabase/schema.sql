@@ -1,7 +1,5 @@
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "postgis";
-CREATE EXTENSION IF NOT EXISTS "pgvector";
 
 -- 1. Create Profiles Table (extends auth.users)
 CREATE TABLE IF NOT EXISTS public.profiles (
