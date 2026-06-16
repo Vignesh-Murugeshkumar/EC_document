@@ -1,0 +1,15 @@
+# Node dependencies
+node_modules/
+frontend/node_modules/
+
+# Next.js build output
+frontend/.next/
+frontend/node_modules/
+
+# Python virtual environment and cache
+backend/.venv/
+__pycache__/
+*.pyc
+
+# Environment variables
+.env
