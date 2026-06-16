@@ -17,15 +17,6 @@
       "maxDuration": 60
     }
   },
-  "env": {
-    "SUPABASE_URL": "@supabase-url",
-    "SUPABASE_SERVICE_ROLE_KEY": "@supabase-service-role-key",
-    "SUPABASE_JWT_SECRET": "@supabase-jwt-secret",
-    "OPENAI_API_KEY": "@openai-api-key",
-    "RAZORPAY_KEY_ID": "@razorpay-key-id",
-    "RAZORPAY_KEY_SECRET": "@razorpay-key-secret",
-    "RAZORPAY_WEBHOOK_SECRET": "@razorpay-webhook-secret"
-  },
   "headers": [
     {
       "source": "/api/(.*)",
