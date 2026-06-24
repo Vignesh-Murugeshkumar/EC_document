@@ -48,7 +48,11 @@ const i18nDictionary = {
     descriptionText: "Description",
     recommendationText: "Recommendation",
     noAnomaliesText: "No anomalies detected in this category.",
-    viewReport: "View Full Report"
+    viewReport: "View Full Report",
+    noDocSelected: "No Document Selected",
+    noDocSelectedDesc: "Please upload an Encumbrance Certificate or select a previously analyzed document from the history logs to view the visual analysis dashboard.",
+    goToUpload: "Go to Upload",
+    viewHistory: "View History"
   },
   hi: {
     appName: "ईसी विश्लेषण इंजन",

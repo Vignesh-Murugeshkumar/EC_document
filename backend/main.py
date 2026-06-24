@@ -189,41 +189,15 @@ async def verify_otp(req: OTPVerifyRequest, request: Request):
     response = supabase.table("profiles").select("*").eq("phone", phone).execute()
     profile = response.data[0] if response.data else None
     
-    user_id = None
-    role = "user"
-    sub_status = "free"
-    
-    if profile:
-        user_id = profile["id"]
-        role = profile["role"]
-        sub_status = profile["subscription_status"]
-    else:
-        # Create a new user account in Supabase Auth & public profiles
-        # Generate a deterministic UUID based on phone
-        import uuid
-        user_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"phone:{phone}"))
+    if not profile:
+        raise HTTPException(
+            status_code=403, 
+            detail="Public registration is disabled. Only pre-authorized mobile numbers are permitted to access this application."
+        )
         
-        # Check if auth.users already has it, else insert via admin client
-        try:
-            supabase.auth.admin.create_user({
-                "id": user_id,
-                "phone": phone,
-                "phone_confirm": True,
-                "user_metadata": {"name": req.name}
-            })
-        except Exception:
-            # User might exist in Auth table but not in profiles
-            pass
-            
-        # Create profile record
-        supabase.table("profiles").insert({
-            "id": user_id,
-            "phone": phone,
-            "name": req.name,
-            "role": "user",
-            "subscription_status": "free",
-            "is_test_account": False
-        }).execute()
+    user_id = profile["id"]
+    role = profile["role"]
+    sub_status = profile["subscription_status"]
         
     # Sign JWT session token
     payload = {
@@ -559,7 +533,7 @@ async def get_document(document_id: str, user: Dict[str, Any] = Depends(get_user
     sub_tier = prof_resp.data[0]["subscription_status"] if prof_resp.data else "free"
     
     # Handle Free Tier Masking Constraints
-    if sub_tier == "free" and doc["status"] == "complete" and doc["analysis_results"]:
+    if sub_tier == "free" and user.get("role") != "admin" and doc["status"] == "complete" and doc["analysis_results"]:
         results = doc["analysis_results"].copy()
         current_year = 2026 # Matches current mock system clock year
         cutoff_year = current_year - 3 # last 3 years: 2024, 2025, 2026. Prior is blurred

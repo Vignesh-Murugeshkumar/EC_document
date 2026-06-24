@@ -124,68 +124,78 @@ export default function SubscriptionHub() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <div className="bg-[#f4f6f9] text-slate-900 font-sans min-h-screen flex flex-col">
       {/* Navbar */}
-      <header className="app-header">
-        <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-          <button onClick={() => router.push("/dashboard")} className="btn btn-secondary" style={{ padding: "6px 10px" }}>
+      <header className="flex justify-between items-center px-6 py-3.5 border-b border-slate-200/60 bg-white/80 backdrop-blur-md sticky top-0 z-50 shadow-sm no-print">
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => router.push("/dashboard")} 
+            className="flex items-center justify-center p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200 shadow-sm transition-all active:scale-95 duration-100"
+            title="Go Back"
+          >
             <ArrowLeft size={16} />
-            Back
           </button>
-          <a href="#" className="logo-section">
-            <div className="logo-icon">EC</div>
-            <span>{t("appName")} — Subscription Control Center</span>
-          </a>
+          <span className="font-display text-lg font-bold text-slate-900 font-rajdhani tracking-wider uppercase">EC Analyser</span>
+        </div>
+        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider hidden sm:block">
+          Subscription Center
         </div>
       </header>
 
       {/* Main comparison grid */}
-      <main style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 20px" }}>
-        <div style={{ width: "100%", maxWidth: "800px", textAlign: "center", marginBottom: "40px" }}>
-          <Sparkles size={40} color="var(--primary)" style={{ margin: "0 auto 15px auto" }} />
-          <h2 style={{ fontSize: "28px", fontWeight: "800", marginBottom: "10px", fontFamily: "var(--font-display)" }}>
+      <main className="flex-grow flex flex-col items-center justify-center py-12 px-6 max-w-5xl mx-auto w-full animate-fade-in">
+        <div className="text-center mb-10 max-w-lg">
+          <div className="h-12 w-12 rounded-2xl bg-orange-50 border border-orange-100 flex items-center justify-center mx-auto mb-4 text-orange-500 shadow-sm">
+            <Sparkles size={24} />
+          </div>
+          <h2 className="text-2xl font-extrabold text-slate-900 mb-2 font-rajdhani uppercase tracking-wide">
             Choose Your Access Plan
           </h2>
-          <p style={{ color: "var(--text-secondary)", fontSize: "15px" }}>
-            Unlock complete title reports and legal recommendations for safer property transactions.
+          <p className="text-slate-500 text-xs leading-relaxed">
+            Unlock complete title reports, unlimited history ranges, and detailed legal recommendations for safer property transactions.
           </p>
         </div>
 
         {/* Comparison Cards Row */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "30px", width: "100%", maxWidth: "800px" }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-3xl">
           
           {/* Free Tier Card */}
-          <div className="glass-card" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", border: "1px solid var(--border-card)" }}>
-            <div>
-              <h3 style={{ fontSize: "20px", fontWeight: "700", marginBottom: "8px" }}>Free Plan</h3>
-              <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginBottom: "20px" }}>
-                Basic property checks for initial verification.
-              </p>
+          <div className="glass-card flex flex-col justify-between shadow-lg relative overflow-hidden">
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-extrabold text-slate-800 font-rajdhani uppercase tracking-wider">Free Plan</h3>
+                <p className="text-slate-400 text-xs mt-1">
+                  Basic property checks for initial verification.
+                </p>
+              </div>
               
-              <div style={{ fontSize: "32px", fontWeight: "800", marginBottom: "24px", fontFamily: "var(--font-display)" }}>
-                ₹0 <span style={{ fontSize: "14px", fontWeight: "400", color: "var(--text-secondary)" }}>/ forever</span>
+              <div className="text-3xl font-extrabold text-slate-950 font-display font-rajdhani leading-none">
+                ₹0 <span className="text-xs font-normal text-slate-400">/ forever</span>
               </div>
 
-              <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "12px", fontSize: "13px" }}>
-                <li style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <Check size={14} color="var(--success)" />
+              <ul className="space-y-3.5 text-xs text-slate-600 border-t border-slate-100 pt-5">
+                <li className="flex items-center gap-2.5">
+                  <Check size={14} className="text-emerald-500 bg-emerald-50 rounded-full p-0.5" />
                   PDF Upload & Text Extraction
                 </li>
-                <li style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <Check size={14} color="var(--success)" />
+                <li className="flex items-center gap-2.5">
+                  <Check size={14} className="text-emerald-500 bg-emerald-50 rounded-full p-0.5" />
                   Last 3 years history analysis
                 </li>
-                <li style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <Check size={14} color="var(--success)" />
+                <li className="flex items-center gap-2.5">
+                  <Check size={14} className="text-emerald-500 bg-emerald-50 rounded-full p-0.5" />
                   On-screen summary dashboard
                 </li>
-                <li style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--text-muted)", textDecoration: "line-through" }}>
+                <li className="flex items-center gap-2.5 text-slate-400 line-through opacity-70">
+                  <span className="h-3.5 w-3.5 border border-slate-200 rounded-full flex items-center justify-center text-[8px] font-bold text-slate-400">✕</span>
                   Download report as PDF
                 </li>
-                <li style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--text-muted)", textDecoration: "line-through" }}>
+                <li className="flex items-center gap-2.5 text-slate-400 line-through opacity-70">
+                  <span className="h-3.5 w-3.5 border border-slate-200 rounded-full flex items-center justify-center text-[8px] font-bold text-slate-400">✕</span>
                   Print verification reports
                 </li>
-                <li style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--text-muted)", textDecoration: "line-through" }}>
+                <li className="flex items-center gap-2.5 text-slate-400 line-through opacity-70">
+                  <span className="h-3.5 w-3.5 border border-slate-200 rounded-full flex items-center justify-center text-[8px] font-bold text-slate-400">✕</span>
                   Unlimited monthly processing
                 </li>
               </ul>
@@ -193,57 +203,54 @@ export default function SubscriptionHub() {
 
             <button 
               disabled={user?.subscription_status === "free"} 
-              className="btn btn-secondary" 
-              style={{ width: "100%", marginTop: "30px", padding: "12px" }}
+              className="w-full mt-8 py-3 px-4 rounded-xl border border-slate-200 text-slate-700 bg-slate-50 font-bold text-xs uppercase tracking-wider transition-colors hover:bg-slate-100 disabled:opacity-85 disabled:cursor-default"
             >
               {user?.subscription_status === "free" ? "Current Plan" : "Downgrade"}
             </button>
           </div>
 
           {/* Premium Tier Card */}
-          <div className="glass-card" style={{ 
-            display: "flex", 
-            flexDirection: "column", 
-            justifyContent: "space-between", 
-            borderColor: "var(--primary)",
-            background: "radial-gradient(circle at top right, rgba(59, 130, 246, 0.15), var(--bg-card) 70%)"
-          }}>
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                <h3 style={{ fontSize: "20px", fontWeight: "700" }}>Premium Plan</h3>
-                <span className="badge" style={{ background: "var(--primary-glow)", color: "var(--primary)", fontSize: "10px" }}>RECOMMENDED</span>
+          <div className="glass-card-premium flex flex-col justify-between relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-orange-500 to-amber-500"></div>
+            
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-lg font-extrabold text-orange-950 font-rajdhani uppercase tracking-wider">Premium Plan</h3>
+                  <p className="text-orange-900/60 text-xs mt-1">
+                    Comprehensive title validation for professionals.
+                  </p>
+                </div>
+                <span className="badge bg-orange-100 text-orange-700 border border-orange-200 text-[9px] font-bold">RECOMMENDED</span>
               </div>
-              <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginBottom: "20px" }}>
-                Comprehensive title validation for lawyers & property buyers.
-              </p>
               
-              <div style={{ fontSize: "32px", fontWeight: "800", marginBottom: "24px", fontFamily: "var(--font-display)" }}>
-                ₹999 <span style={{ fontSize: "14px", fontWeight: "400", color: "var(--text-secondary)" }}>/ year</span>
+              <div className="text-3xl font-extrabold text-orange-950 font-display font-rajdhani leading-none">
+                ₹999 <span className="text-xs font-normal text-orange-900/60">/ year</span>
               </div>
 
-              <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "12px", fontSize: "13px" }}>
-                <li style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <Check size={14} color="var(--success)" />
+              <ul className="space-y-3.5 text-xs text-orange-950 border-t border-orange-100 pt-5">
+                <li className="flex items-center gap-2.5">
+                  <Check size={14} className="text-emerald-600 bg-emerald-100 rounded-full p-0.5" />
                   PDF Upload & Text Extraction
                 </li>
-                <li style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <Check size={14} color="var(--success)" />
+                <li className="flex items-center gap-2.5">
+                  <Check size={14} className="text-emerald-600 bg-emerald-100 rounded-full p-0.5" />
                   <strong>Unlimited history range</strong> (Full EC)
                 </li>
-                <li style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <Check size={14} color="var(--success)" />
+                <li className="flex items-center gap-2.5">
+                  <Check size={14} className="text-emerald-600 bg-emerald-100 rounded-full p-0.5" />
                   On-screen summary dashboard
                 </li>
-                <li style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <Check size={14} color="var(--success)" />
+                <li className="flex items-center gap-2.5">
+                  <Check size={14} className="text-emerald-600 bg-emerald-100 rounded-full p-0.5" />
                   <strong>Download PDF Reports</strong>
                 </li>
-                <li style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <Check size={14} color="var(--success)" />
+                <li className="flex items-center gap-2.5">
+                  <Check size={14} className="text-emerald-600 bg-emerald-100 rounded-full p-0.5" />
                   <strong>Print verification reports</strong>
                 </li>
-                <li style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <Check size={14} color="var(--success)" />
+                <li className="flex items-center gap-2.5">
+                  <Check size={14} className="text-emerald-600 bg-emerald-100 rounded-full p-0.5" />
                   <strong>Unlimited monthly uploads</strong>
                 </li>
               </ul>
@@ -252,8 +259,7 @@ export default function SubscriptionHub() {
             <button 
               onClick={handleCheckout} 
               disabled={loading || user?.subscription_status === "premium"} 
-              className="btn btn-primary" 
-              style={{ width: "100%", marginTop: "30px", padding: "12px", background: "linear-gradient(135deg, var(--primary), var(--primary-hover))" }}
+              className="w-full mt-8 py-3 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold text-xs shadow-md transition-all uppercase tracking-wider active:scale-[0.98] duration-150 disabled:opacity-85 disabled:cursor-default"
             >
               {user?.subscription_status === "premium" ? "Active Plan" : (loading ? "Processing..." : "Upgrade to Premium")}
             </button>

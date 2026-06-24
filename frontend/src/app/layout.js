@@ -1,9 +1,15 @@
 "use client";
 
+import { usePathname, useRouter } from "next/navigation";
+import { ArrowLeft, Home } from "lucide-react";
 import { LanguageProvider } from "./i18n";
 import "./globals.css";
 
 export default function RootLayout({ children }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const isLoginPage = pathname === "/";
+
   return (
     <html lang="en">
       <head>
@@ -16,7 +22,12 @@ export default function RootLayout({ children }) {
       </head>
       <body>
         <LanguageProvider>
-          {children}
+          <div className="min-h-screen flex flex-col">
+            {/* Page Content */}
+            <div className="flex-grow flex flex-col">
+              {children}
+            </div>
+          </div>
         </LanguageProvider>
       </body>
     </html>

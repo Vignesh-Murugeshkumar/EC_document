@@ -15,6 +15,7 @@ export default function AdminPage() {
 
   const [adminUser, setAdminUser] = useState(null);
   const [token, setToken] = useState(null);
+  const [authorized, setAuthorized] = useState(false);
 
   // States
   const [stats, setStats] = useState({
@@ -54,17 +55,22 @@ export default function AdminPage() {
       return;
     }
     
-    const parsedUser = JSON.parse(storedUser);
-    if (parsedUser.role !== "admin") {
-      router.push("/dashboard");
-      return;
+    try {
+      const parsedUser = JSON.parse(storedUser);
+      if (parsedUser.role !== "admin") {
+        router.push("/dashboard");
+        return;
+      }
+      
+      setToken(storedToken);
+      setAdminUser(parsedUser);
+      setAuthorized(true);
+      
+      // Fetch live data from backend if online
+      fetchAdminData(storedToken);
+    } catch (e) {
+      router.push("/");
     }
-    
-    setToken(storedToken);
-    setAdminUser(parsedUser);
-    
-    // Fetch live data from backend if online
-    fetchAdminData(storedToken);
   }, [router]);
 
   const fetchAdminData = async (activeToken) => {
@@ -157,6 +163,7 @@ export default function AdminPage() {
   const handleLogout = () => {
     localStorage.removeItem("ec_token");
     localStorage.removeItem("ec_user");
+    document.cookie = "ec_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     router.push("/");
   };
 
@@ -167,114 +174,139 @@ export default function AdminPage() {
     u.id.includes(searchQuery)
   );
 
-  return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-      {/* Admin Header */}
-      <header className="app-header">
-        <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-          <button onClick={() => router.push("/dashboard")} className="btn btn-secondary" style={{ padding: "6px 10px" }}>
-            <ArrowLeft size={16} />
-            Back
-          </button>
-          <a href="#" className="logo-section">
-            <div className="logo-icon" style={{ background: "var(--primary)" }}>AD</div>
-            <span>{t("appName")} — Administrator Control Panel</span>
-          </a>
-        </div>
+  if (!authorized) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#f4f6f9] px-6 relative overflow-hidden">
+        {/* Background Decorative Elements */}
+        <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-orange-500/5 blur-[100px] pointer-events-none animate-pulse-soft"></div>
+        <div className="absolute -bottom-40 -right-20 w-[450px] h-[450px] rounded-full bg-blue-500/5 blur-[120px] pointer-events-none"></div>
 
-        <button onClick={handleLogout} className="btn btn-secondary" style={{ padding: "6px 12px", fontSize: "13px" }}>
-          <LogOut size={14} />
-        </button>
+        <div className="glass-card p-8 max-w-sm w-full text-center relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-orange-500 to-amber-500"></div>
+          <div className="spinner-saffron w-8 h-8 mx-auto mb-4"></div>
+          <h3 className="font-display text-lg font-bold text-slate-850 font-rajdhani uppercase tracking-wider mb-2">Verifying Credentials</h3>
+          <p className="text-slate-400 text-xs leading-normal">Securing connection to the Administrator Panel...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-[#f4f6f9] text-slate-900 font-sans min-h-screen flex flex-col relative overflow-hidden">
+      {/* Background Decorative Elements */}
+      <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-orange-500/5 blur-[100px] pointer-events-none animate-pulse-soft"></div>
+      <div className="absolute -bottom-40 -right-20 w-[450px] h-[450px] rounded-full bg-blue-500/5 blur-[120px] pointer-events-none"></div>
+
+      {/* Admin Control Bar */}
+      <header className="flex justify-between items-center px-6 py-3.5 border-b border-slate-200/60 bg-white/80 backdrop-blur-md sticky top-0 z-50 shadow-sm no-print relative z-20">
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => router.push("/dashboard")} 
+            className="flex items-center justify-center p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200 shadow-sm transition-all active:scale-95 duration-100"
+            title="Go Back to Dashboard"
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <span className="font-display text-lg font-bold text-slate-900 font-rajdhani tracking-wider uppercase">EC Analyser</span>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider hidden sm:block font-rajdhani">
+            Administrator Panel
+          </div>
+          <button onClick={handleLogout} className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-2 px-4 rounded-xl transition-all shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-95 duration-150">
+            <LogOut size={12} />
+            Sign Out
+          </button>
+        </div>
       </header>
 
       {/* Main Panel Content */}
-      <main style={{ flex: 1, padding: "40px", maxWidth: "1400px", width: "100%", margin: "0 auto" }}>
+      <main className="flex-grow py-8 px-6 max-w-7xl w-full mx-auto space-y-6 animate-fade-in relative z-10">
         
         {/* Alerts messages banner */}
         {(successMsg || errorMsg) && (
-          <div style={{ 
-            background: successMsg ? "var(--success-glow)" : "var(--danger-glow)",
-            borderLeft: `4px solid ${successMsg ? "var(--success)" : "var(--danger)"}`,
-            padding: "14px",
-            borderRadius: "6px",
-            fontSize: "14px",
-            color: successMsg ? "var(--success)" : "var(--danger)",
-            marginBottom: "25px"
-          }}>
+          <div 
+            className={`border-l-4 p-4 rounded-xl text-xs font-semibold shadow-sm animate-fade-in ${
+              successMsg 
+                ? "bg-emerald-50 border-emerald-500 text-emerald-800" 
+                : "bg-red-50 border-red-500 text-red-800"
+            }`}
+          >
             {successMsg || errorMsg}
           </div>
         )}
 
         {/* System Stats Row */}
-        <div className="dashboard-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: "30px" }}>
-          <div className="glass-card" style={{ padding: "20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-secondary)", fontSize: "13px", marginBottom: "10px" }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="glass-card flex flex-col justify-between relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-blue-500 to-indigo-500"></div>
+            <div className="flex justify-between items-center text-slate-400 text-xs font-bold uppercase tracking-wider mb-2 font-rajdhani">
               <span>Total Customers</span>
-              <Users size={16} color="var(--primary)" />
+              <Users size={16} className="text-slate-500" />
             </div>
-            <div style={{ fontSize: "28px", fontWeight: "700" }}>{stats.users.total}</div>
-            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
+            <div className="text-3xl font-extrabold font-display text-slate-900 leading-none">{stats.users.total}</div>
+            <div className="text-[10px] text-slate-400 font-semibold mt-2">
               {stats.users.premium} premium, {stats.users.free} free accounts
             </div>
           </div>
 
-          <div className="glass-card" style={{ padding: "20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-secondary)", fontSize: "13px", marginBottom: "10px" }}>
+          <div className="glass-card flex flex-col justify-between relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-emerald-500 to-teal-500"></div>
+            <div className="flex justify-between items-center text-slate-400 text-xs font-bold uppercase tracking-wider mb-2 font-rajdhani">
               <span>Analyses Completed</span>
-              <CheckCircle size={16} color="var(--success)" />
+              <CheckCircle size={16} className="text-emerald-500" />
             </div>
-            <div style={{ fontSize: "28px", fontWeight: "700" }}>{stats.analyses.completed}</div>
-            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
+            <div className="text-3xl font-extrabold font-display text-slate-900 leading-none">{stats.analyses.completed}</div>
+            <div className="text-[10px] text-slate-400 font-semibold mt-2">
               Successfully processed text layers
             </div>
           </div>
 
-          <div className="glass-card" style={{ padding: "20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-secondary)", fontSize: "13px", marginBottom: "10px" }}>
+          <div className="glass-card flex flex-col justify-between relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-rose-500 to-red-500"></div>
+            <div className="flex justify-between items-center text-slate-400 text-xs font-bold uppercase tracking-wider mb-2 font-rajdhani">
               <span>Analyses Failed</span>
-              <AlertTriangle size={16} color="var(--danger)" />
+              <AlertTriangle size={16} className="text-red-500 animate-pulse-soft" />
             </div>
-            <div style={{ fontSize: "28px", fontWeight: "700" }}>{stats.analyses.failed}</div>
-            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
+            <div className="text-3xl font-extrabold font-display text-slate-900 leading-none">{stats.analyses.failed}</div>
+            <div className="text-[10px] text-slate-400 font-semibold mt-2">
               Scanned uploads or validation errors
             </div>
           </div>
 
-          <div className="glass-card" style={{ padding: "20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-secondary)", fontSize: "13px", marginBottom: "10px" }}>
-              <span>Average health score</span>
-              <Activity size={16} color="var(--warning)" />
+          <div className="glass-card flex flex-col justify-between relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-orange-500 to-amber-500"></div>
+            <div className="flex justify-between items-center text-slate-400 text-xs font-bold uppercase tracking-wider mb-2 font-rajdhani">
+              <span>Average Health Score</span>
+              <Activity size={16} className="text-orange-500" />
             </div>
-            <div style={{ fontSize: "28px", fontWeight: "700" }}>{stats.analyses.average_health_score} / 100</div>
-            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
+            <div className="text-3xl font-extrabold font-display text-slate-900 leading-none">{stats.analyses.average_health_score} / 100</div>
+            <div className="text-[10px] text-slate-400 font-semibold mt-2">
               Standard distribution across reports
             </div>
           </div>
         </div>
 
         {/* Main Columns */}
-        <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: "24px", marginBottom: "30px" }}>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           {/* User management container */}
-          <div className="glass-card" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ fontSize: "18px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
-                <Users size={20} color="var(--primary)" />
+          <div className="glass-card lg:col-span-2 space-y-4 relative overflow-hidden">
+            <div className="flex flex-col sm:flex-row gap-4 justify-between sm:items-center">
+              <h3 className="text-sm font-extrabold text-slate-900 font-rajdhani uppercase tracking-wide flex items-center gap-2">
+                <Users size={18} className="text-slate-500" />
                 User Account Management
               </h3>
               
               {/* Search Bar */}
-              <div style={{ position: "relative", width: "240px" }}>
-                <Search size={14} style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+              <div className="relative w-full sm:w-60">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input 
                   type="text" 
-                  placeholder="Search user ID or phone..."
+                  placeholder="Search name, ID or phone..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{
-                    width: "100%", padding: "6px 10px 6px 32px", background: "rgba(255,255,255,0.03)",
-                    border: "1px solid var(--border-card)", borderRadius: "6px", color: "white", fontSize: "12px", outline: "none"
-                  }}
+                  className="w-full pl-9 pr-4 py-2 bg-white/50 border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-100 rounded-xl text-xs text-slate-800 outline-none transition-all"
                 />
               </div>
             </div>
@@ -294,27 +326,26 @@ export default function AdminPage() {
                 <tbody>
                   {filteredUsers.map((u) => (
                     <tr key={u.id}>
-                      <td>{u.phone}</td>
-                      <td>{u.name || "N/A"}</td>
+                      <td className="font-mono text-xs font-semibold">{u.phone}</td>
+                      <td className="font-semibold text-slate-700">{u.name || "N/A"}</td>
                       <td>
-                        <span className={`badge`} style={{ 
-                          background: u.subscription_status === "premium" ? "var(--success-glow)" : "rgba(255,255,255,0.05)",
-                          color: u.subscription_status === "premium" ? "var(--success)" : "var(--text-secondary)"
+                        <span className="badge" style={{ 
+                          background: u.subscription_status === "premium" ? "rgba(224, 123, 63, 0.08)" : "rgba(100, 116, 139, 0.06)",
+                          color: u.subscription_status === "premium" ? "var(--secondary)" : "var(--text-muted)"
                         }}>
                           {u.subscription_status}
                         </span>
                       </td>
-                      <td style={{ textTransform: "capitalize" }}>{u.role}</td>
+                      <td className="capitalize font-semibold text-xs text-slate-600">{u.role}</td>
                       <td>
-                        <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                          {u.is_test_account ? "Test Account" : "Public Customer"}
+                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider font-rajdhani">
+                          {u.is_test_account ? "Tester" : "Public Customer"}
                         </span>
                       </td>
                       <td>
                         <button 
                           onClick={() => handleToggleUserTier(u.id, u.subscription_status)}
-                          className="btn btn-secondary"
-                          style={{ padding: "4px 8px", fontSize: "11px" }}
+                          className="px-3 py-1.5 rounded-xl border border-slate-200 hover:border-orange-500 hover:text-orange-600 bg-white hover:bg-orange-50/10 font-bold text-[10px] uppercase tracking-wider transition-all duration-150 active:scale-95 shadow-sm font-rajdhani"
                         >
                           Toggle Plan
                         </button>
@@ -327,44 +358,53 @@ export default function AdminPage() {
           </div>
 
           {/* System status health indicators */}
-          <div className="glass-card" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-            <h3 style={{ fontSize: "18px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
-              <Shield size={20} color="var(--primary)" />
-              Infrastructure System Uptime
+          <div className="glass-card lg:col-span-1 space-y-4 relative overflow-hidden">
+            <h3 className="text-sm font-extrabold text-slate-900 font-rajdhani uppercase tracking-wide flex items-center gap-2">
+              <Shield size={18} className="text-slate-500" />
+              Infrastructure Uptime
             </h3>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-card)", paddingBottom: "12px" }}>
-                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                  <CloudLightning size={16} color="var(--success)" />
+            <div className="space-y-4">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                <div className="flex gap-2.5 items-center">
+                  <CloudLightning size={16} className="text-slate-500" />
                   <div>
-                    <strong style={{ display: "block", fontSize: "13px" }}>Modal worker status</strong>
-                    <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>ec-validator-worker</span>
+                    <strong className="block text-xs text-slate-700 font-semibold">Modal Worker</strong>
+                    <span className="text-[10px] text-slate-400 font-mono">ec-validator-worker</span>
                   </div>
                 </div>
-                <span className="badge" style={{ background: "var(--success-glow)", color: "var(--success)" }}>Active (0-scale)</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="led-status led-active"></span>
+                  <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-100 font-bold text-[9px] font-rajdhani">Active (0-scale)</span>
+                </div>
               </div>
 
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-card)", paddingBottom: "12px" }}>
-                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                  <Database size={16} color="var(--success)" />
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                <div className="flex gap-2.5 items-center">
+                  <Database size={16} className="text-slate-500" />
                   <div>
-                    <strong style={{ display: "block", fontSize: "13px" }}>Supabase Client connectivity</strong>
-                    <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Private Storage RLS active</span>
+                    <strong className="block text-xs text-slate-700 font-semibold">Supabase Client</strong>
+                    <span className="text-[10px] text-slate-400 font-mono">Storage RLS Active</span>
                   </div>
                 </div>
-                <span className="badge" style={{ background: "var(--success-glow)", color: "var(--success)" }}>Connected</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="led-status led-active"></span>
+                  <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-100 font-bold text-[9px] font-rajdhani">Connected</span>
+                </div>
               </div>
 
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                  <Server size={16} color="var(--success)" />
+              <div className="flex justify-between items-center">
+                <div className="flex gap-2.5 items-center">
+                  <Server size={16} className="text-slate-500" />
                   <div>
-                    <strong style={{ display: "block", fontSize: "13px" }}>FastAPI App Gateway</strong>
-                    <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Render Web Service host</span>
+                    <strong className="block text-xs text-slate-700 font-semibold">FastAPI Gateway</strong>
+                    <span className="text-[10px] text-slate-400 font-mono">Vercel Serverless</span>
                   </div>
                 </div>
-                <span className="badge" style={{ background: "var(--success-glow)", color: "var(--success)" }}>Online</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="led-status led-active"></span>
+                  <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-100 font-bold text-[9px] font-rajdhani">Online</span>
+                </div>
               </div>
             </div>
           </div>
@@ -372,9 +412,9 @@ export default function AdminPage() {
         </div>
 
         {/* Failed analyses review block */}
-        <div className="glass-card" style={{ marginBottom: "30px", display: "flex", flexDirection: "column", gap: "20px" }}>
-          <h3 style={{ fontSize: "18px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px", color: "var(--danger)" }}>
-            <AlertTriangle size={20} color="var(--danger)" />
+        <div className="glass-card space-y-4 relative overflow-hidden">
+          <h3 className="text-sm font-extrabold text-red-600 font-rajdhani uppercase tracking-wide flex items-center gap-2">
+            <AlertTriangle size={18} className="text-red-500 animate-pulse-soft" />
             Failed Analysis Review
           </h3>
 
@@ -393,19 +433,18 @@ export default function AdminPage() {
                 {failedAnalyses.length > 0 ? (
                   failedAnalyses.map((doc) => (
                     <tr key={doc.id}>
-                      <td>{doc.filename}</td>
+                      <td className="font-mono text-xs font-semibold text-slate-700">{doc.filename}</td>
                       <td>
-                        <span className="badge badge-high" style={{ fontSize: "10px" }}>
+                        <span className="badge badge-high">
                           {doc.error_code}
                         </span>
                       </td>
-                      <td style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{doc.error_message}</td>
-                      <td style={{ fontSize: "12px" }}>{new Date(doc.created_at).toLocaleString()}</td>
+                      <td className="text-slate-500 text-xs font-medium">{doc.error_message}</td>
+                      <td className="text-slate-500 text-xs font-semibold font-mono">{new Date(doc.created_at).toLocaleString()}</td>
                       <td>
                         <button 
                           onClick={() => handleRetryAnalysis(doc.id)}
-                          className="btn btn-secondary"
-                          style={{ padding: "4px 8px", fontSize: "11px", gap: "4px" }}
+                          className="px-3 py-1.5 rounded-xl border border-slate-200 hover:border-orange-500 hover:text-orange-600 bg-white hover:bg-orange-50/10 font-bold text-[10px] uppercase tracking-wider flex items-center gap-1.5 transition-all duration-150 active:scale-95 shadow-sm font-rajdhani"
                         >
                           <RotateCcw size={10} />
                           Retry
@@ -415,7 +454,7 @@ export default function AdminPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: "center", color: "var(--text-muted)", padding: "20px" }}>
+                    <td colSpan={5} className="text-center text-slate-400 py-6 font-medium">
                       No failed analysis reports recorded in the database logs.
                     </td>
                   </tr>
@@ -426,9 +465,9 @@ export default function AdminPage() {
         </div>
 
         {/* Audit Log Viewer */}
-        <div className="glass-card" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          <h3 style={{ fontSize: "18px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
-            <Activity size={20} color="var(--primary)" />
+        <div className="glass-card space-y-4 relative overflow-hidden">
+          <h3 className="text-sm font-extrabold text-slate-900 font-rajdhani uppercase tracking-wide flex items-center gap-2">
+            <Activity size={18} className="text-slate-500" />
             Security Audit Trail Log (`ec_audit_log`)
           </h3>
 
@@ -446,20 +485,20 @@ export default function AdminPage() {
               <tbody>
                 {auditLogs.map((log) => (
                   <tr key={log.id}>
-                    <td style={{ fontSize: "12px" }}>{new Date(log.created_at).toLocaleString()}</td>
-                    <td style={{ fontSize: "11px", color: "var(--text-muted)" }}>{log.user_id || "System"}</td>
+                    <td className="font-mono text-xs font-semibold text-slate-500">{new Date(log.created_at).toLocaleString()}</td>
+                    <td className="font-mono text-xs text-slate-400 select-all">{log.user_id || "System"}</td>
                     <td>
                       <span className="badge" style={{ 
-                        background: log.action.includes("complete") || log.action.includes("created") ? "var(--success-glow)" : 
-                                    log.action.includes("error") || log.action.includes("expired") ? "var(--danger-glow)" : "rgba(255,255,255,0.05)",
+                        background: log.action.includes("complete") || log.action.includes("created") ? "rgba(5, 150, 105, 0.08)" : 
+                                    log.action.includes("error") || log.action.includes("expired") ? "rgba(220, 38, 38, 0.08)" : "rgba(100, 116, 139, 0.06)",
                         color: log.action.includes("complete") || log.action.includes("created") ? "var(--success)" : 
-                               log.action.includes("error") || log.action.includes("expired") ? "var(--danger)" : "var(--text-secondary)"
+                               log.action.includes("error") || log.action.includes("expired") ? "var(--danger)" : "var(--text-muted)"
                       }}>
                         {log.action}
                       </span>
                     </td>
-                    <td style={{ fontSize: "12px" }}>{log.ip_address || "Local"}</td>
-                    <td style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                    <td className="font-mono text-xs text-slate-500">{log.ip_address || "Local"}</td>
+                    <td className="font-mono text-xs text-slate-400">
                       {JSON.stringify(log.metadata)}
                     </td>
                   </tr>
