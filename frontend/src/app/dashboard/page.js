@@ -24,39 +24,7 @@ export default function DashboardPage() {
   const [activeView, setActiveView] = useState("upload"); // 'dashboard', 'upload', 'history', 'settings'
 
   // Documents listing
-  const [documents, setDocuments] = useState([
-    { id: "mock-doc-1", filename: "Survey #1234 - Tambaram", status: "complete", health_score: 92, created_at: new Date(Date.now() - 7200000).toISOString(), analysis_mode: "standard", analysis_results: {
-      transactions: [
-        { entry_number: "1", date: "10-02-2022", year: 2022, transaction_type: "Sale Deed", parties: [{ name: "Ramesh Rao", role: "Seller" }, { name: "Anand Sen", role: "Buyer" }], survey_number: "1234", property_description: "Tambaram Plot 12", amount: "₹45,00,000" }
-      ],
-      ownership_chain: [{ transaction_id: "1", from_party: "Ramesh Rao", to_party: "Anand Sen", year: 2022, status: "valid" }],
-      anomalies: [],
-      summary: { total_transactions: 1, missing_entries_count: 0, duplicate_entries_count: 0, ownership_issues_count: 0, encumbrance_anomalies_count: 0, health_score: 92, year_wise_distribution: [{ year: 2022, anomaly_count: 0 }] }
-    }},
-    { id: "mock-doc-2", filename: "Flat 4B - Sky Heights", status: "complete", health_score: 68, created_at: new Date(Date.now() - 86400000).toISOString(), analysis_mode: "multi_agent", analysis_results: {
-      transactions: [
-        { entry_number: "1", date: "14-06-2021", year: 2021, transaction_type: "Sale Deed", parties: [{ name: "Karan Johar", role: "Seller" }, { name: "Aditya Chopra", role: "Buyer" }], survey_number: "Flat 4B", property_description: "Sky Heights Apartment", amount: "₹1,20,00,000" },
-        { entry_number: "2", date: "15-08-2023", year: 2023, transaction_type: "Mortgage", parties: [{ name: "Aditya Chopra", role: "Mortgagor" }, { name: "ICICI Bank", role: "Mortgagee" }], survey_number: "Flat 4B", property_description: "ICICI Home Loan", amount: "₹80,00,000" }
-      ],
-      ownership_chain: [{ transaction_id: "1", from_party: "Karan Johar", to_party: "Aditya Chopra", year: 2021, status: "valid" }],
-      anomalies: [{ type: "encumbrance_anomaly", severity: "medium", year: 2023, entry_number: "2", description: "Active ICICI mortgage loan recorded with no release deed.", recommendation: "Request NOC and register discharge deed." }],
-      summary: { total_transactions: 2, missing_entries_count: 0, duplicate_entries_count: 0, ownership_issues_count: 0, encumbrance_anomalies_count: 1, health_score: 68, year_wise_distribution: [{ year: 2021, anomaly_count: 0 }, { year: 2023, anomaly_count: 1 }] }
-    }},
-    { id: "mock-doc-3", filename: "Plot 12A - Velachery", status: "complete", health_score: 41, created_at: new Date(Date.now() - 259200000).toISOString(), analysis_mode: "standard", analysis_results: {
-      transactions: [
-        { entry_number: "1", date: "20-03-2022", year: 2022, transaction_type: "Sale Deed", parties: [{ name: "Vijay Sethupathi", role: "Seller" }, { name: "Dhanush K", role: "Buyer" }], survey_number: "12A", property_description: "Velachery Land Plot", amount: "₹75,00,000" },
-        { entry_number: "2", date: "12-11-2025", year: 2025, transaction_type: "Sale Deed", parties: [{ name: "Sivakarthikeyan", role: "Seller" }, { name: "Anirudh R", role: "Buyer" }], survey_number: "12A", property_description: "Velachery Land Plot", amount: "₹90,00,000" }
-      ],
-      ownership_chain: [
-        { transaction_id: "1", from_party: "Vijay Sethupathi", to_party: "Dhanush K", year: 2022, status: "valid" },
-        { transaction_id: "2", from_party: "Sivakarthikeyan", to_party: "Anirudh R", year: 2025, status: "gap_detected" }
-      ],
-      anomalies: [
-        { type: "incorrect_ownership_transfer", severity: "high", year: 2025, entry_number: "2", description: "Sivakarthikeyan sold the plot, but Dhanush was the last registered owner.", recommendation: "Perform manual deed trace for missing links between Dhanush and Sivakarthikeyan." }
-      ],
-      summary: { total_transactions: 2, missing_entries_count: 1, duplicate_entries_count: 0, ownership_issues_count: 1, encumbrance_anomalies_count: 0, health_score: 41, year_wise_distribution: [{ year: 2022, anomaly_count: 0 }, { year: 2025, anomaly_count: 1 }] }
-    }}
-  ]);
+  const [documents, setDocuments] = useState([]);
 
   // Selected active document
   const [selectedDoc, setSelectedDoc] = useState(null);
@@ -354,65 +322,9 @@ export default function DashboardPage() {
       }, 2000);
 
     } catch (err) {
-      console.warn("Backend upload failed, starting simulated offline pipeline:", err);
-      // Fallback to offline simulation
-      const mockDoc = {
-        id: "doc-mock-" + Math.random().toString(36).substr(2, 9),
-        filename: uploadedFile.name,
-        status: "processing",
-        created_at: new Date().toISOString(),
-        analysis_mode: analysisMode,
-        analysis_results: null
-      };
-      setSelectedDoc(mockDoc);
-
-      setTimeout(() => {
-        const mockResults = {
-          transactions: [
-            { entry_number: "1", date: "12-05-2021", year: 2021, transaction_type: "Sale Deed", parties: [{ name: "Rajesh Rao", role: "Seller" }, { name: "Anand Sen", role: "Buyer" }], survey_number: "101/4", property_description: "Residential Plot 15, Area 1500 sqft", amount: "₹30,00,000" },
-            { entry_number: "2", date: "19-10-2023", year: 2023, transaction_type: "Mortgage", parties: [{ name: "Anand Sen", role: "Mortgagor" }, { name: "SBI Bank", role: "Mortgagee" }], survey_number: "101/4", property_description: "SBI Mortgage loan", amount: "₹20,00,000" },
-            { entry_number: "3", date: "15-02-2025", year: 2025, transaction_type: "Sale Deed", parties: [{ name: "Vikram Shah", role: "Seller" }, { name: "Priya Nair", role: "Buyer" }], survey_number: "101/4", property_description: "Residential Plot 15, Area 1500 sqft", amount: "₹55,00,000" }
-          ],
-          ownership_chain: [
-            { transaction_id: "1", from_party: "Rajesh Rao", to_party: "Anand Sen", year: 2021, status: "valid" },
-            { transaction_id: "3", from_party: "Vikram Shah", to_party: "Priya Nair", year: 2025, status: "gap_detected" }
-          ],
-          anomalies: [
-            { type: "encumbrance_anomaly", severity: "high", year: 2023, entry_number: "2", description: "SBI home loan mortgage remains active. No Release Deed found in records.", recommendation: "Verify with seller if loan is closed and register a Discharge Deed." },
-            { type: "incorrect_ownership_transfer", severity: "high", year: 2025, entry_number: "3", description: "Vikram Shah sold the property to Priya Nair, but the last recorded buyer was Anand Sen. Vikram's source of title is missing.", recommendation: "Check if there is an unrecorded deed between Anand Sen and Vikram Shah." }
-          ],
-          summary: {
-            total_transactions: 3,
-            missing_entries_count: 1,
-            duplicate_entries_count: 0,
-            ownership_issues_count: 1,
-            encumbrance_anomalies_count: 1,
-            health_score: 50,
-            year_wise_distribution: [
-              { year: 2021, anomaly_count: 0 },
-              { year: 2023, anomaly_count: 1 },
-              { year: 2025, anomaly_count: 1 }
-            ]
-          }
-        };
-
-        // Translate if regional language
-        if (extractionLang !== "English") {
-          mockResults.anomalies.forEach(a => {
-            a.description = `[Translated to ${extractionLang}] ` + a.description;
-            a.recommendation = `[Translated to ${extractionLang}] ` + a.recommendation;
-          });
-        }
-
-        mockDoc.status = "complete";
-        mockDoc.health_score = 50;
-        mockDoc.analysis_results = mockResults;
-
-        setSelectedDoc({ ...mockDoc });
-        setDocuments(prev => [mockDoc, ...prev]);
-        setUploading(false);
-        setActiveView("dashboard");
-      }, 12000);
+      console.error("Backend upload failed:", err);
+      setUploadError(err.message || "Failed to upload and analyze document. Please check your connection and try again.");
+      setUploading(false);
     }
   };
 

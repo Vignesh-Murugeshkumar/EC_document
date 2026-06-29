@@ -370,120 +370,22 @@ async def upload_document(
         f = modal.Function.lookup("ec-validator-worker", "process_ec_document")
         f.spawn(doc_id, pdf_signed_url, user["sub"], language, mode)
     except Exception as e:
-        # Fallback/mock worker trigger if Modal is not fully set up in this test environment
-        print(f"[WORKER TRIGGER FAILURE] Triggering mock analysis: {str(e)}")
-        # We spawn a background thread to mock analysis updates so the app remains interactive!
-        import asyncio
-        from fastapi import BackgroundTasks
-        
-        async def run_mock_pipeline(doc_id: str, language: str, mode: str):
-            # In mock mode, resolve 'auto' to 'standard' since we can't estimate transactions
-            mock_resolved_mode = "standard" if mode == "auto" else mode
-            supabase.table("ec_documents").update({"analysis_mode": mock_resolved_mode}).eq("id", doc_id).execute()
-            
-            await asyncio.sleep(2)
-            supabase.table("ec_documents").update({"status": "extracting"}).eq("id", doc_id).execute()
-            await asyncio.sleep(2)
-            supabase.table("ec_documents").update({"status": "analysing"}).eq("id", doc_id).execute()
-            await asyncio.sleep(2)
-            supabase.table("ec_documents").update({"status": "summarising"}).eq("id", doc_id).execute()
-            await asyncio.sleep(2)
-            supabase.table("ec_documents").update({"status": "generating_report"}).eq("id", doc_id).execute()
-            await asyncio.sleep(2)
-            
-            # Generate mock findings JSON
-            mock_results = {
-                "transactions": [
-                    {
-                        "entry_number": "1",
-                        "date": "10-02-2022",
-                        "year": 2022,
-                        "transaction_type": "Sale Deed",
-                        "parties": [
-                            {"name": "Ramesh Kumar", "role": "Seller"},
-                            {"name": "Suresh Dev", "role": "Buyer"}
-                        ],
-                        "survey_number": "45/A",
-                        "property_description": "Residential Plot No 12, Area 2400 sqft",
-                        "amount": "₹45,00,000"
-                    },
-                    {
-                        "entry_number": "2",
-                        "date": "14-06-2023",
-                        "year": 2023,
-                        "transaction_type": "Mortgage",
-                        "parties": [
-                            {"name": "Suresh Dev", "role": "Mortgagor"},
-                            {"name": "HDFC Bank Ltd", "role": "Mortgagee"}
-                        ],
-                        "survey_number": "45/A",
-                        "property_description": "Residential Plot No 12, mortgaged for housing loan",
-                        "amount": "₹35,00,000"
-                    },
-                    {
-                        "entry_number": "3",
-                        "date": "20-11-2025",
-                        "year": 2025,
-                        "transaction_type": "Sale Deed",
-                        "parties": [
-                            {"name": "Amit Sharma", "role": "Seller"},
-                            {"name": "Priya Patel", "role": "Buyer"}
-                        ],
-                        "survey_number": "45/A",
-                        "property_description": "Residential Plot No 12, Area 2400 sqft",
-                        "amount": "₹65,00,000"
-                    }
-                ],
-                "ownership_chain": [
-                    {"transaction_id": "1", "from_party": "Ramesh Kumar", "to_party": "Suresh Dev", "year": 2022, "status": "valid"},
-                    {"transaction_id": "3", "from_party": "Amit Sharma", "to_party": "Priya Patel", "year": 2025, "status": "gap_detected"}
-                ],
-                "anomalies": [
-                    {
-                        "type": "encumbrance_anomaly",
-                        "severity": "high",
-                        "year": 2023,
-                        "entry_number": "2",
-                        "description": "A mortgage from HDFC Bank remains active without a registered Release/Discharge Deed.",
-                        "recommendation": "Request a copy of the No Objection Certificate (NOC) and register the Discharge Deed at the sub-registrar office."
-                    },
-                    {
-                        "type": "incorrect_ownership_transfer",
-                        "severity": "high",
-                        "year": 2025,
-                        "entry_number": "3",
-                        "description": "Amit Sharma sold the property to Priya Patel, but the last registered owner in the sequence was Suresh Dev. Amit Sharma has no record of acquisition.",
-                        "recommendation": "Perform a manual search for missing deeds between 2023 and 2025 to verify how Amit Sharma acquired the title."
-                    }
-                ],
-                "summary": {
-                    "total_transactions": 3,
-                    "missing_entries_count": 1,
-                    "duplicate_entries_count": 0,
-                    "ownership_issues_count": 1,
-                    "encumbrance_anomalies_count": 1,
-                    "health_score": 50,
-                    "year_wise_distribution": [
-                        {"year": 2023, "anomaly_count": 1},
-                        {"year": 2025, "anomaly_count": 1}
-                    ]
-                }
-            }
-            
-            # Apply language translation mock if regional language selected
-            if language != "en":
-                for anom in mock_results["anomalies"]:
-                    anom["description"] = f"[Translated to {language}] " + anom["description"]
-                    anom["recommendation"] = f"[Translated to {language}] " + anom["recommendation"]
-
+        print(f"[WORKER TRIGGER FAILURE] Failing analysis request: {str(e)}")
+        # Cleanup uploaded file from storage
+        try:
+            supabase.storage.from_("ec-documents").remove([storage_path])
+        except Exception:
+            pass
+        # Update document status to error
+        try:
             supabase.table("ec_documents").update({
-                "status": "complete",
-                "health_score": 50,
-                "analysis_results": mock_results
+                "status": "error",
+                "error_code": "worker_invocation_failed",
+                "error_message": f"Worker trigger failed: {str(e)}"
             }).eq("id", doc_id).execute()
-            
-        import asyncio
-        asyncio.create_task(run_mock_pipeline(doc_id, language, mode))
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"Failed to trigger analysis worker: {str(e)}")
     
     return {
         "document_id": doc_id,
