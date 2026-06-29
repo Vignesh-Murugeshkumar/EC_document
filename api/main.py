@@ -367,7 +367,7 @@ async def upload_document(
     # Trigger Modal serverless worker asynchronously
     try:
         import modal
-        f = modal.Function.lookup("ec-validator-worker", "process_ec_document")
+        f = modal.Function.from_name("ec-validator-worker", "process_ec_document")
         f.spawn(doc_id, pdf_signed_url, user["sub"], language, mode)
     except Exception as e:
         print(f"[WORKER TRIGGER FAILURE] Failing analysis request: {str(e)}")
@@ -766,14 +766,10 @@ async def retry_analysis(document_id: str):
     
     try:
         import modal
-        f = modal.Function.lookup("ec-validator-worker", "process_ec_document")
+        f = modal.Function.from_name("ec-validator-worker", "process_ec_document")
         f.spawn(document_id, pdf_signed_url, doc["owner_id"], "en", doc.get("analysis_mode", "standard"))
-    except Exception:
-        # Fallback background task
-        import asyncio
-        async def run_mock_pipeline_retry(doc_id: str):
-            await asyncio.sleep(2)
-            supabase.table("ec_documents").update({"status": "complete", "health_score": 75}).eq("id", doc_id).execute()
-        asyncio.create_task(run_mock_pipeline_retry(document_id))
+    except Exception as e:
+        supabase.table("ec_documents").update({"status": "error", "error_code": "worker_retrigger_failed", "error_message": str(e)}).eq("id", document_id).execute()
+        raise HTTPException(status_code=500, detail=f"Failed to trigger analysis worker: {str(e)}")
         
     return {"status": "success", "message": "Retry scheduled successfully"}
