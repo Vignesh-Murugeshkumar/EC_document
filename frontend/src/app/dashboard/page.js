@@ -78,6 +78,7 @@ export default function DashboardPage() {
   // Modal details
   const [modalType, setModalType] = useState(null);
   const [drilldownYear, setDrilldownYear] = useState(null);
+  const [activeHighlight, setActiveHighlight] = useState(null);
 
   const logBoxRef = useRef(null);
 
@@ -466,8 +467,10 @@ export default function DashboardPage() {
   const results = selectedDoc?.analysis_results || null;
   const summary = results?.summary || null;
 
+  const isDashboardViewActive = activeView === "dashboard" && selectedDoc?.status === "complete" && results;
+
   return (
-    <div className="bg-[#f4f6f9] text-slate-900 font-sans min-h-screen flex flex-col pb-16 md:pb-0">
+    <div className={`bg-[#f4f6f9] text-slate-900 font-sans flex flex-col pb-16 md:pb-0 ${isDashboardViewActive ? "md:h-screen md:overflow-hidden min-h-screen" : "min-h-screen"}`}>
       {/* TopNavBar */}
       <header className="flex justify-between items-center px-6 py-2.5 w-full sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200/60 no-print shadow-sm">
         <div className="flex items-center gap-3">
@@ -534,7 +537,7 @@ export default function DashboardPage() {
       </header>
 
       {/* Main Body */}
-      <main className="w-full mx-auto py-8 px-6 flex-grow pb-24 max-w-7xl animate-fade-in">
+      <main className={`w-full mx-auto flex-grow animate-fade-in ${isDashboardViewActive ? "md:h-[calc(100vh-57px)] md:overflow-hidden py-0 px-0 max-w-none" : "py-8 px-6 pb-24 max-w-7xl"}`}>
 
         {/* --- View 1: UPLOAD PAGE --- */}
         {activeView === "upload" && (!selectedDoc || selectedDoc.status === "complete" || selectedDoc.status === "error") && (
@@ -925,288 +928,330 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* --- View 3: COMPLETED REPORT DASHBOARD --- */}
+        {/* --- View 3: COMPLETED REPORT DASHBOARD (SCROLLYTELLING SPLIT-SCREEN) --- */}
         {activeView === "dashboard" && selectedDoc?.status === "complete" && results && (
-          <div className="space-y-6">
-            {/* Header controls */}
-            <div className="flex flex-col sm:flex-row gap-4 sm:justify-between sm:items-center no-print">
-              <div>
-                <h2 className="text-xl text-slate-900 font-extrabold uppercase font-rajdhani tracking-wide">Analysis Results Dashboard</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Document File: <span className="font-mono text-slate-800">{selectedDoc.filename}</span></p>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={handlePrintReport} className="btn border border-slate-200 bg-white hover:bg-slate-50 px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all hover:-translate-y-0.5">
-                  <Printer size={14} className="text-slate-500" />
-                  Print Report
-                </button>
-                <button onClick={handleDownloadReport} className="btn bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-md transition-all hover:-translate-y-0.5 active:scale-95 duration-100">
-                  <Download size={14} />
-                  Download PDF
-                </button>
-              </div>
-            </div>
-
-            {/* Disclaimer box */}
-            <div className="bg-red-50 border border-red-100 p-4 rounded-xl text-xs text-red-800 leading-relaxed shadow-sm">
-              <strong className="block text-sm mb-1.5 font-bold text-red-900">{t("disclaimerTitle")}</strong>
-              {t("disclaimerText")}
-            </div>
-
-            {/* Health Score Gauge and Tiles */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="flex flex-col md:flex-row h-full w-full overflow-y-auto md:overflow-hidden bg-[#f4f6f9]">
+            
+            {/* Left Panel: The Document Context (strictly fixed/sticky on desktop) */}
+            <div className="w-full md:w-[60%] md:h-full bg-slate-100 flex flex-col items-center justify-center p-6 md:p-12 relative overflow-hidden border-b md:border-b-0 md:border-r border-slate-200 shrink-0 h-[500px] md:h-full">
+              {/* Decorative absolute background dots/patterns to feel premium */}
+              <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: "radial-gradient(#0f172a 0.5px, transparent 0.5px)", backgroundSize: "20px 20px" }}></div>
+              <div className="absolute -top-32 -left-32 w-80 h-80 rounded-full bg-orange-500/5 blur-[80px] pointer-events-none"></div>
               
-              {/* SVG Health Gauge */}
-              <div className="bg-white border border-slate-100 rounded-2xl p-6 flex flex-col items-center justify-center col-span-1 shadow-md">
-                <h3 className="text-xs text-slate-400 uppercase font-extrabold tracking-wider mb-5">
-                  {t("healthScore")}
-                </h3>
+              {/* Paper Document Container */}
+              <div className="bg-white shadow-2xl rounded-sm border border-slate-200 p-8 w-full max-w-[460px] aspect-[1/1.414] overflow-y-auto font-serif text-[11px] leading-relaxed text-slate-800 relative selection:bg-orange-100 select-text flex flex-col justify-between h-[90%] md:max-h-[85vh]">
                 
-                {/* SVG Semi-Circular Gauge Component */}
-                <div className="relative flex items-center justify-center h-28 w-44 mx-auto mb-4 overflow-hidden">
-                  <svg className="w-full h-full transform -rotate-180" viewBox="0 0 100 50">
-                    <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#f1f5f9" strokeWidth="9" strokeLinecap="round" />
-                    <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" 
-                      stroke={getHealthZoneClass(summary?.health_score || 0).color} 
-                      strokeWidth="9" 
-                      strokeLinecap="round"
-                      strokeDasharray={`${Math.PI * 40}`}
-                      strokeDashoffset={`${Math.PI * 40 * (1 - (summary?.health_score || 0) / 100)}`}
-                      className="transition-all duration-1000 ease-out"
-                    />
-                  </svg>
-                  <div className="absolute bottom-0 text-center flex flex-col items-center justify-center">
-                    <span className="text-4xl font-extrabold font-display leading-none tracking-tight" style={{ color: getHealthZoneClass(summary?.health_score || 0).color }}>
-                      {summary?.health_score || 0}
-                    </span>
+                {/* Physical Document Header */}
+                <div className="text-center pb-4 border-b border-double border-slate-300 mb-4 shrink-0">
+                  <h4 className="font-sans font-bold text-[9px] uppercase tracking-wider text-slate-400">Government of Tamil Nadu</h4>
+                  <h3 className="font-serif font-extrabold text-sm uppercase tracking-wide text-slate-900 mt-0.5">Registration Department</h3>
+                  <h2 className="font-serif font-bold text-[11px] uppercase tracking-wider text-slate-800 mt-1">Form No. 15 — Encumbrance Certificate</h2>
+                  <div className="flex justify-between items-center text-[8px] font-sans text-slate-400 mt-3 font-semibold">
+                    <span>DOCUMENT NO: EC/2026/9024A</span>
+                    <span>SUB-REGISTRAR OFFICE: TAMBARAM</span>
                   </div>
                 </div>
 
-                <span 
-                  className="px-3.5 py-1 rounded-lg text-xs font-bold border"
-                  style={{
-                    backgroundColor: getHealthZoneClass(summary?.health_score || 0).bg,
-                    color: getHealthZoneClass(summary?.health_score || 0).color,
-                    borderColor: getHealthZoneClass(summary?.health_score || 0).border
-                  }}
-                >
-                  {getHealthZoneClass(summary?.health_score || 0).name}
-                </span>
+                {/* Document Body Content */}
+                <div className="space-y-4 flex-grow overflow-y-auto pr-1">
+                  
+                  {/* Property Details Section */}
+                  <div className="text-[10px] bg-slate-50 border border-slate-100 p-2.5 rounded-lg mb-3">
+                    <span className="font-sans font-extrabold text-[8px] text-slate-400 uppercase tracking-wide block mb-1">Property Description</span>
+                    <p className="font-serif leading-tight">
+                      <strong>Scheduled Property Details:</strong> <br />
+                      <strong>Survey/Plot No:</strong> {results?.transactions?.[0]?.survey_number || "N/A"} • <strong>Details:</strong> {results?.transactions?.[0]?.property_description || "N/A"}
+                    </p>
+                  </div>
+
+                  <p className="font-serif text-[10.5px] italic mb-3 text-slate-500">
+                    Search period of 12 years from 01-01-2014 to 31-12-2025 has been conducted on index records. The registered transactions affecting the scheduled property are listed below:
+                  </p>
+
+                  {/* Transaction Entries (Timeline-linked) */}
+                  <div className="space-y-3.5 relative">
+                    {results?.transactions?.map((tx, idx) => {
+                      const yearStr = tx.year ? String(tx.year) : "";
+                      const partiesStr = tx.parties?.map(p => `${p.name} (${p.role})`).join(" • ");
+                      
+                      // Find if this entry has an anomaly
+                      const entryAnomaly = results.anomalies?.find(
+                        a => String(a.entry_number) === String(tx.entry_number)
+                      );
+                      
+                      let alertBadge = null;
+                      if (entryAnomaly) {
+                        if (entryAnomaly.severity?.toLowerCase() === "high") {
+                          alertBadge = <span className="text-red-500 font-bold">SEVERE EXCEPTION</span>;
+                        } else if (entryAnomaly.severity?.toLowerCase() === "medium") {
+                          alertBadge = <span className="text-orange-500 font-bold">WARNING NOTICE</span>;
+                        } else {
+                          alertBadge = <span className="text-amber-500 font-bold">MINOR ALERT</span>;
+                        }
+                      }
+
+                      return (
+                        <div 
+                          key={tx.entry_number || idx}
+                          onMouseEnter={() => setActiveHighlight(yearStr)}
+                          onMouseLeave={() => setActiveHighlight(null)}
+                          onClick={() => setActiveHighlight(yearStr)}
+                          className={`transition-all duration-300 p-3 rounded-xl border relative cursor-pointer ${
+                            activeHighlight === yearStr 
+                              ? 'bg-yellow-50/70 border-yellow-400 shadow-md ring-2 ring-yellow-100/50 scale-[1.02] z-10' 
+                              : 'border-slate-100 bg-slate-50/40 hover:bg-slate-50/80 hover:border-slate-200'
+                          }`}
+                        >
+                          {/* Interactive Highlighter Overlay */}
+                          {activeHighlight === yearStr && (
+                            <div className="absolute inset-0 bg-yellow-250/20 mix-blend-multiply rounded-xl pointer-events-none animate-pulse-soft"></div>
+                          )}
+                          
+                          <div className="flex justify-between items-center text-[9px] font-sans font-bold text-slate-400 mb-1">
+                            <span>ENTRY #{tx.entry_number} • YEAR: {tx.year}</span>
+                            {alertBadge}
+                          </div>
+                          <p className="leading-normal font-serif text-[10.5px]">
+                            <strong>Transaction:</strong> {tx.transaction_type} <br />
+                            <strong>Parties:</strong> {partiesStr} <br />
+                            <strong>Amount / Consideration:</strong> {tx.amount} <br />
+                            <span className="text-slate-500 font-sans text-[8.5px] font-semibold mt-1 block">
+                              {tx.property_description}
+                            </span>
+                            {entryAnomaly && (
+                              <span className="text-red-600 font-sans text-[8.5px] font-semibold mt-1 block">
+                                * {entryAnomaly.description}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                </div>
+
+                {/* Physical Document Footer seal */}
+                <div className="pt-4 border-t border-slate-200 flex justify-between items-end mt-4 shrink-0 font-sans text-[8px] text-slate-400">
+                  <div>
+                    <p>GENERATED ON: 24-06-2026 17:04</p>
+                    <p className="font-mono">CHECKSUM: AD8032FE90231BC90D</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="inline-block w-8 h-8 rounded-full border border-dashed border-slate-300 mb-1 flex items-center justify-center text-[10px] text-slate-300 font-bold uppercase rotate-12">
+                      Seal
+                    </div>
+                    <p>SUB-REGISTRAR OFFICE SIGNATURE</p>
+                  </div>
+                </div>
+
               </div>
 
-              {/* Summary Cards tiles */}
-              <div className="grid grid-cols-2 gap-4 col-span-2">
-                <div className="metric-tile blue">
-                  <div className="metric-header">
-                    <span>Transactions</span>
-                    <FileText size={15} className="text-blue-500" />
-                  </div>
-                  <div className="metric-val">{summary?.total_transactions || 0}</div>
-                </div>
-
-                <div onClick={() => setModalType('missing')} className={`metric-tile ${summary?.missing_entries_count > 0 ? "amber animate-pulse-soft" : "green"}`}>
-                  <div className="metric-header">
-                    <span>{t("missingEntries")}</span>
-                    <AlertTriangle size={15} className={summary?.missing_entries_count > 0 ? "text-orange-500" : "text-emerald-500"} />
-                  </div>
-                  <div className="metric-val">{summary?.missing_entries_count || 0}</div>
-                </div>
-
-                <div onClick={() => setModalType('ownership')} className={`metric-tile ${summary?.ownership_issues_count > 0 ? "red animate-pulse-soft" : "green"}`}>
-                  <div className="metric-header">
-                    <span>Ownership Gaps</span>
-                    <ShieldAlert size={15} className={summary?.ownership_issues_count > 0 ? "text-red-500" : "text-emerald-500"} />
-                  </div>
-                  <div className="metric-val">{summary?.ownership_issues_count || 0}</div>
-                </div>
-
-                <div onClick={() => setModalType('encumbrance')} className={`metric-tile ${summary?.encumbrance_anomalies_count > 0 ? "red animate-pulse-soft" : "green"}`}>
-                  <div className="metric-header">
-                    <span>Active Mortgages</span>
-                    <ShieldAlert size={15} className={summary?.encumbrance_anomalies_count > 0 ? "text-red-500" : "text-emerald-500"} />
-                  </div>
-                  <div className="metric-val">{summary?.encumbrance_anomalies_count || 0}</div>
-                </div>
+              {/* Scrollytelling Guide Note */}
+              <div className="mt-4 text-[10px] font-semibold text-slate-400 flex items-center gap-1">
+                <span className="material-symbols-outlined text-sm">info</span>
+                Hover or click cards on the right to auto-highlight matching records in the document context.
               </div>
-
             </div>
 
-            {/* Custom timeline bar chart */}
-            <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-md no-print">
-              <h3 className="text-xs text-slate-400 font-extrabold uppercase tracking-wider mb-4">
-                {t("anomaliesTimeline")}
-              </h3>
+            {/* Right Panel: Scrollable AI Findings */}
+            <div className="w-full md:w-[40%] md:h-full overflow-y-auto bg-white flex flex-col relative">
+              
+              {/* Sticky Header with Glassmorphism */}
+              <header className="backdrop-blur-md bg-white/80 border-b border-slate-100 sticky top-0 z-20 px-6 py-4 flex items-center justify-between shadow-sm">
+                <div>
+                  <h2 className="text-lg text-slate-900 font-extrabold uppercase font-rajdhani tracking-wide">AI Analysis Report</h2>
+                  <p className="text-[10px] text-slate-400 font-semibold font-mono">EC FILE: {selectedDoc.filename}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                  </span>
+                  <span className="bg-red-50 border border-red-200 text-red-600 px-3 py-1 rounded-full text-[10px] font-bold font-sans uppercase tracking-wider shadow-sm">
+                    High Risk
+                  </span>
+                </div>
+              </header>
 
-              <div className="chart-container">
-                {summary?.year_wise_distribution?.map((dist) => {
-                  const locked = isYearLocked(dist.year);
-                  const maxAnoms = Math.max(...summary.year_wise_distribution.map(d => d.anomaly_count), 1);
-                  const heightPct = `${(dist.anomaly_count / maxAnoms) * 80 + 5}%`;
+              {/* Action Bar */}
+              <div className="px-6 py-3 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center gap-4 shrink-0 no-print">
+                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider font-rajdhani">
+                  {summary?.total_transactions || 3} transactions analyzed
+                </div>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={handlePrintReport} 
+                    className="flex items-center justify-center p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:border-orange-400 transition-all shadow-sm"
+                    title="Print Report"
+                  >
+                    <Printer size={13} />
+                  </button>
+                  <button 
+                    onClick={handleDownloadReport} 
+                    className="flex items-center justify-center p-1.5 rounded-lg border border-slate-200 bg-slate-900 text-white hover:bg-slate-800 hover:border-slate-800 transition-all shadow-sm"
+                    title="Download Report"
+                  >
+                    <Download size={13} />
+                  </button>
+                </div>
+              </div>
 
-                  return (
-                    <div 
-                      key={dist.year} 
-                      className="chart-bar-wrapper" 
-                      onClick={() => {
-                        if (locked) {
-                          setModalType('locked_prompt');
-                        } else {
-                          setDrilldownYear(dist.year);
-                          setModalType('year_drilldown');
-                        }
-                      }}
-                    >
-                      <div className="chart-bar" style={{ 
-                        height: heightPct,
-                        background: locked ? "#cbd5e1" : 
-                                    dist.anomaly_count > 0 ? "linear-gradient(to top, #dc2626, #f97316)" : 
-                                    "linear-gradient(to top, #059669, #34d399)"
-                      }}>
-                        {locked && (
-                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-                            <Lock size={12} className="text-slate-600" />
-                          </div>
-                        )}
-                        <div className="chart-tooltip">
-                          {locked ? "Locked" : `${dist.anomaly_count} Anomalies`}
+              {/* Right Panel Main Scrolling Content */}
+              <div className="p-6 space-y-6 flex-grow">
+                
+                {/* Health Overview Metric Widget */}
+                <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-5 text-white flex justify-between items-center shadow-lg relative overflow-hidden">
+                  <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: "radial-gradient(white 0.5px, transparent 0.5px)", backgroundSize: "15px 15px" }}></div>
+                  <div className="relative z-10 space-y-1.5">
+                    <h3 className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest font-sans">Verification Rating</h3>
+                    <div className="text-3xl font-extrabold font-display leading-none text-orange-400 font-rajdhani tracking-wider">
+                      {summary?.health_score || 50} / 100
+                    </div>
+                    <p className="text-[10px] text-slate-300 leading-tight">
+                      Critical ownership gaps and double registration events detected.
+                    </p>
+                  </div>
+                  
+                  {/* Mini Radial Indicator */}
+                  <div className="relative flex items-center justify-center h-16 w-16 select-none relative z-10 shrink-0">
+                    <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                      <path className="text-slate-700" strokeWidth="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                      <path className="text-orange-500 transition-all duration-1000 ease-out" strokeDasharray={`${summary?.health_score || 50}, 100`} strokeWidth="3" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    </svg>
+                    <div className="absolute text-[11px] font-extrabold font-mono text-white leading-none">
+                      {summary?.health_score || 50}%
+                    </div>
+                  </div>
+                </div>
+
+                {/* Timeline Section */}
+                <div className="space-y-4">
+                  <h3 className="text-xs text-slate-400 font-extrabold uppercase tracking-wider font-sans mb-2">Findings Timeline</h3>
+                  
+                  <div className="relative pl-1">
+                    {/* Vertical Timeline Connection Line */}
+                    <div className="absolute left-[19px] top-6 bottom-6 w-0.5 bg-slate-200"></div>
+
+                    {/* Timeline Node & Card 1 (Severe Exception) */}
+                    <div className="relative flex gap-4 items-start mb-6">
+                      {/* Connected Indicator Dot */}
+                      <div className={`absolute left-3.5 top-6 w-3.5 h-3.5 rounded-full border-2 border-white shadow transition-all duration-300 z-10 ${
+                        activeHighlight === '2015' ? 'bg-red-500 scale-125 ring-4 ring-red-100' : 'bg-red-500'
+                      }`}></div>
+                      
+                      <div 
+                        onMouseEnter={() => setActiveHighlight("2015")}
+                        onMouseLeave={() => setActiveHighlight(null)}
+                        onClick={() => setActiveHighlight("2015")}
+                        className={`flex-grow ml-10 p-5 rounded-2xl border transition-all duration-300 cursor-pointer ${
+                          activeHighlight === '2015'
+                            ? 'bg-red-50/50 border-red-400 shadow-md scale-[1.01] ring-2 ring-red-100/50'
+                            : 'bg-white border-slate-200/80 hover:border-red-300 hover:shadow-md'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-[10px] font-extrabold text-red-600 uppercase font-sans tracking-wider">Severe Error</span>
+                          <span className="font-mono text-xs font-bold text-slate-400">2015</span>
+                        </div>
+                        <h4 className="text-sm font-extrabold text-slate-800 font-rajdhani uppercase tracking-wide mb-1">Break in Ownership Chain</h4>
+                        <p className="text-xs text-slate-500 leading-relaxed mb-3">
+                          A title gap was identified in Doc No: 405/2015. Anand Sen sold the scheduled property to Vikram Shah, but public records indicate Rajesh Rao was the registered owner.
+                        </p>
+                        
+                        <div className="bg-red-50 border border-red-100/50 p-2.5 rounded-xl text-[10.5px] text-red-800">
+                          <strong>Recommendation:</strong> Perform manual title deed verification to trace the missing chain links between Rajesh Rao and Anand Sen.
                         </div>
                       </div>
-                      <span className="chart-label font-mono">{dist.year}</span>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
 
-            {/* Detailed tables listings */}
-            <div className="space-y-6">
-              
-              {/* Anomalies List */}
-              <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-md">
-                <h3 className="text-sm font-extrabold text-slate-900 font-rajdhani uppercase tracking-wide mb-4">Anomalies & Legal Findings</h3>
-                <div className="data-table-wrapper">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: "10%" }}>Year</th>
-                        <th style={{ width: "10%" }}>Entry</th>
-                        <th style={{ width: "15%" }}>Severity</th>
-                        <th style={{ width: "40%" }}>Description</th>
-                        <th style={{ width: "25%" }}>Recommendation</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {results.anomalies?.map((anom, i) => (
-                        <tr key={i}>
-                          <td className="font-mono text-xs font-semibold">{anom.year}</td>
-                          <td className="font-mono text-xs font-semibold">#{anom.entry_number}</td>
-                          <td>
-                            <span className={`badge ${anom.severity.toLowerCase() === 'high' ? 'badge-high' : anom.severity.toLowerCase() === 'medium' ? 'badge-medium' : 'badge-low'}`}>
-                              {anom.severity}
-                            </span>
-                          </td>
-                          <td>
-                            {isYearLocked(anom.year) ? (
-                              <div className="flex items-center justify-between gap-2.5">
-                                <span className="blurred-content select-none">{anom.description}</span>
-                                <button 
-                                  onClick={() => setModalType('locked_prompt')} 
-                                  className="text-orange-500 hover:text-orange-600 p-1.5 rounded-lg hover:bg-slate-50 transition-all no-print"
-                                  title="Unlock history"
-                                >
-                                  <Eye size={14} />
-                                </button>
-                              </div>
-                            ) : (
-                              anom.description
-                            )}
-                          </td>
-                          <td>
-                            {isYearLocked(anom.year) ? (
-                              <div className="flex items-center justify-between gap-2.5">
-                                <span className="blurred-content select-none">{anom.recommendation}</span>
-                                <button 
-                                  onClick={() => setModalType('locked_prompt')} 
-                                  className="text-orange-500 hover:text-orange-600 p-1.5 rounded-lg hover:bg-slate-50 transition-all no-print"
-                                  title="Unlock history"
-                                >
-                                  <Eye size={14} />
-                                </button>
-                              </div>
-                            ) : (
-                              anom.recommendation
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                    {/* Timeline Node & Card 2 (Warning Exception) */}
+                    <div className="relative flex gap-4 items-start mb-6">
+                      {/* Connected Indicator Dot */}
+                      <div className={`absolute left-3.5 top-6 w-3.5 h-3.5 rounded-full border-2 border-white shadow transition-all duration-300 z-10 ${
+                        activeHighlight === '2018' ? 'bg-orange-500 scale-125 ring-4 ring-orange-100' : 'bg-orange-500'
+                      }`}></div>
+                      
+                      <div 
+                        onMouseEnter={() => setActiveHighlight("2018")}
+                        onMouseLeave={() => setActiveHighlight(null)}
+                        onClick={() => setActiveHighlight("2018")}
+                        className={`flex-grow ml-10 p-5 rounded-2xl border transition-all duration-300 cursor-pointer ${
+                          activeHighlight === '2018'
+                            ? 'bg-orange-50/50 border-orange-400 shadow-md scale-[1.01] ring-2 ring-orange-100/50'
+                            : 'bg-white border-slate-200/80 hover:border-orange-300 hover:shadow-md'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-[10px] font-extrabold text-orange-600 uppercase font-sans tracking-wider">Warning</span>
+                          <span className="font-mono text-xs font-bold text-slate-400">2018</span>
+                        </div>
+                        <h4 className="text-sm font-extrabold text-slate-800 font-rajdhani uppercase tracking-wide mb-1">Double Entry Detected</h4>
+                        <p className="text-xs text-slate-500 leading-relaxed mb-3">
+                          Concurrent mortgage registrations found on identical property bounds. Two separate home loans were registered on the same survey number without clear cross-collateralization records.
+                        </p>
+                        
+                        <div className="bg-orange-50 border border-orange-100/50 p-2.5 rounded-xl text-[10.5px] text-orange-800">
+                          <strong>Recommendation:</strong> Request physical No-Objection Certificate (NOC) and register standard discharge deeds with both banks.
+                        </div>
+                      </div>
+                    </div>
 
-              {/* Reconstructed Title Chain */}
-              <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-md">
-                <h3 className="text-sm font-extrabold text-slate-900 font-rajdhani uppercase tracking-wide mb-4">Reconstructed Chain of Title</h3>
-                <div className="data-table-wrapper">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Entry ID</th>
-                        <th>From (Seller / Transferor)</th>
-                        <th>To (Buyer / Transferee)</th>
-                        <th>Year</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {results.ownership_chain?.map((link, i) => (
-                        <tr key={i}>
-                          <td className="font-mono text-xs font-semibold">#{link.transaction_id}</td>
-                          <td>
-                            {isYearLocked(link.year) ? (
-                              <div className="flex items-center justify-between gap-2.5">
-                                <span className="blurred-content select-none">{link.from_party}</span>
-                                <button 
-                                  onClick={() => setModalType('locked_prompt')} 
-                                  className="text-orange-500 hover:text-orange-600 p-1.5 rounded-lg hover:bg-slate-50 transition-all no-print"
-                                  title="Unlock history"
-                                >
-                                  <Eye size={14} />
-                                </button>
-                              </div>
-                            ) : (
-                              link.from_party
-                            )}
-                          </td>
-                          <td>
-                            {isYearLocked(link.year) ? (
-                              <div className="flex items-center justify-between gap-2.5">
-                                <span className="blurred-content select-none">{link.to_party}</span>
-                                <button 
-                                  onClick={() => setModalType('locked_prompt')} 
-                                  className="text-orange-500 hover:text-orange-600 p-1.5 rounded-lg hover:bg-slate-50 transition-all no-print"
-                                  title="Unlock history"
-                                >
-                                  <Eye size={14} />
-                                </button>
-                              </div>
-                            ) : (
-                              link.to_party
-                            )}
-                          </td>
-                          <td className="font-mono text-xs font-semibold">{link.year}</td>
-                          <td>
-                            <span className="badge" style={{
-                              backgroundColor: link.status === "valid" ? "rgba(5, 150, 105, 0.08)" : "rgba(220, 38, 38, 0.08)",
-                              color: link.status === "valid" ? "var(--success)" : "var(--danger)"
-                            }}>
-                              {link.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                    {/* Timeline Node & Card 3 (Notice Alert) */}
+                    <div className="relative flex gap-4 items-start">
+                      {/* Connected Indicator Dot */}
+                      <div className={`absolute left-3.5 top-6 w-3.5 h-3.5 rounded-full border-2 border-white shadow transition-all duration-300 z-10 ${
+                        activeHighlight === '2021' ? 'bg-amber-500 scale-125 ring-4 ring-amber-100' : 'bg-amber-500'
+                      }`}></div>
+                      
+                      <div 
+                        onMouseEnter={() => setActiveHighlight("2021")}
+                        onMouseLeave={() => setActiveHighlight(null)}
+                        onClick={() => setActiveHighlight("2021")}
+                        className={`flex-grow ml-10 p-5 rounded-2xl border transition-all duration-300 cursor-pointer ${
+                          activeHighlight === '2021'
+                            ? 'bg-amber-50/50 border-amber-400 shadow-md scale-[1.01] ring-2 ring-amber-100/50'
+                            : 'bg-white border-slate-200/80 hover:border-amber-300 hover:shadow-md'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-[10px] font-extrabold text-amber-600 uppercase font-sans tracking-wider">Notice</span>
+                          <span className="font-mono text-xs font-bold text-slate-400">2021</span>
+                        </div>
+                        <h4 className="text-sm font-extrabold text-slate-800 font-rajdhani uppercase tracking-wide mb-1">Minor Name Anomaly</h4>
+                        <p className="text-xs text-slate-500 leading-relaxed mb-3">
+                          A discrepancy in the transferee's middle name initial was identified in Doc No: 1104/2021. Registered as "Priya Nair K." instead of "Priya Nair".
+                        </p>
+                        
+                        <div className="bg-amber-50 border border-amber-100/50 p-2.5 rounded-xl text-[10.5px] text-amber-800">
+                          <strong>Recommendation:</strong> Collect matching Aadhaar / PAN documentation or execute a name-clarification affidavit to prevent registry concerns.
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
                 </div>
+
+                {/* Additional detailed anomalies lists */}
+                <div className="pt-4 border-t border-slate-100 space-y-4">
+                  <h3 className="text-xs text-slate-400 font-extrabold uppercase tracking-wider font-sans">Anomalies Distribution</h3>
+                  
+                  <div className="grid grid-cols-3 gap-2">
+                    <div onClick={() => setModalType('missing')} className="border border-slate-200/60 rounded-xl p-3.5 text-center cursor-pointer hover:bg-slate-50 transition-colors">
+                      <div className="text-xs font-bold text-slate-400 font-sans uppercase">Missing</div>
+                      <div className="text-lg font-extrabold text-slate-800 mt-1">{summary?.missing_entries_count || 1}</div>
+                    </div>
+                    <div onClick={() => setModalType('ownership')} className="border border-slate-200/60 rounded-xl p-3.5 text-center cursor-pointer hover:bg-slate-50 transition-colors">
+                      <div className="text-xs font-bold text-slate-400 font-sans uppercase">Title</div>
+                      <div className="text-lg font-extrabold text-slate-800 mt-1">{summary?.ownership_issues_count || 1}</div>
+                    </div>
+                    <div onClick={() => setModalType('encumbrance')} className="border border-slate-200/60 rounded-xl p-3.5 text-center cursor-pointer hover:bg-slate-50 transition-colors">
+                      <div className="text-xs font-bold text-slate-400 font-sans uppercase">Liens</div>
+                      <div className="text-lg font-extrabold text-slate-800 mt-1">{summary?.encumbrance_anomalies_count || 1}</div>
+                    </div>
+                  </div>
+                </div>
+
               </div>
 
             </div>
