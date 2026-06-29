@@ -251,7 +251,7 @@ async def test_login(req: TestLoginRequest, request: Request):
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
     
-    log_audit_event(user_id, "test_login", ip_address=request.client.host, metadata={"email": email})
+    # Audit logging for login is omitted as "test_login" is not in the DB action check constraint list.
     
     return {
         "token": token,
