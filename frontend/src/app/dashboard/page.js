@@ -378,6 +378,7 @@ export default function DashboardPage() {
 
   const results = selectedDoc?.analysis_results || null;
   const summary = results?.summary || null;
+  const healthInfo = results ? getHealthZoneClass(summary?.health_score || 50) : null;
 
   const isDashboardViewActive = activeView === "dashboard" && selectedDoc?.status === "complete" && results;
 
@@ -980,8 +981,15 @@ export default function DashboardPage() {
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
                   </span>
-                  <span className="bg-red-50 border border-red-200 text-red-600 px-3 py-1 rounded-full text-[10px] font-bold font-sans uppercase tracking-wider shadow-sm">
-                    High Risk
+                  <span 
+                    className="px-3 py-1 rounded-full text-[10px] font-bold font-sans uppercase tracking-wider shadow-sm border"
+                    style={{
+                      backgroundColor: healthInfo?.bg || "rgba(220, 38, 38, 0.06)",
+                      color: healthInfo?.color || "#dc2626",
+                      borderColor: healthInfo?.border || "rgba(220, 38, 38, 0.15)"
+                    }}
+                  >
+                    {healthInfo?.name || "Checking"}
                   </span>
                 </div>
               </header>
@@ -989,7 +997,7 @@ export default function DashboardPage() {
               {/* Action Bar */}
               <div className="px-6 py-3 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center gap-4 shrink-0 no-print">
                 <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider font-rajdhani">
-                  {summary?.total_transactions || 3} transactions analyzed
+                  {summary?.total_transactions || 0} transactions analyzed
                 </div>
                 <div className="flex gap-2">
                   <button 
@@ -1018,10 +1026,14 @@ export default function DashboardPage() {
                   <div className="relative z-10 space-y-1.5">
                     <h3 className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest font-sans">Verification Rating</h3>
                     <div className="text-3xl font-extrabold font-display leading-none text-orange-400 font-rajdhani tracking-wider">
-                      {summary?.health_score || 50} / 100
+                      {summary?.health_score || 0} / 100
                     </div>
                     <p className="text-[10px] text-slate-300 leading-tight">
-                      Critical ownership gaps and double registration events detected.
+                      {summary?.health_score >= 80 
+                        ? "Property title sequence looks clean with minimal or no exceptions."
+                        : summary?.health_score >= 60
+                        ? "Some minor alerts or warnings detected. Verification is recommended."
+                        : "Critical ownership gaps or encumbrance anomalies detected."}
                     </p>
                   </div>
                   
@@ -1029,10 +1041,10 @@ export default function DashboardPage() {
                   <div className="relative flex items-center justify-center h-16 w-16 select-none relative z-10 shrink-0">
                     <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
                       <path className="text-slate-700" strokeWidth="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                      <path className="text-orange-500 transition-all duration-1000 ease-out" strokeDasharray={`${summary?.health_score || 50}, 100`} strokeWidth="3" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                      <path className="text-orange-500 transition-all duration-1000 ease-out" strokeDasharray={`${summary?.health_score || 0}, 100`} strokeWidth="3" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                     </svg>
                     <div className="absolute text-[11px] font-extrabold font-mono text-white leading-none">
-                      {summary?.health_score || 50}%
+                      {summary?.health_score || 0}%
                     </div>
                   </div>
                 </div>
@@ -1043,104 +1055,82 @@ export default function DashboardPage() {
                   
                   <div className="relative pl-1">
                     {/* Vertical Timeline Connection Line */}
-                    <div className="absolute left-[19px] top-6 bottom-6 w-0.5 bg-slate-200"></div>
+                    {results?.anomalies?.length > 1 && (
+                      <div className="absolute left-[19px] top-6 bottom-6 w-0.5 bg-slate-200"></div>
+                    )}
 
-                    {/* Timeline Node & Card 1 (Severe Exception) */}
-                    <div className="relative flex gap-4 items-start mb-6">
-                      {/* Connected Indicator Dot */}
-                      <div className={`absolute left-3.5 top-6 w-3.5 h-3.5 rounded-full border-2 border-white shadow transition-all duration-300 z-10 ${
-                        activeHighlight === '2015' ? 'bg-red-500 scale-125 ring-4 ring-red-100' : 'bg-red-500'
-                      }`}></div>
-                      
-                      <div 
-                        onMouseEnter={() => setActiveHighlight("2015")}
-                        onMouseLeave={() => setActiveHighlight(null)}
-                        onClick={() => setActiveHighlight("2015")}
-                        className={`flex-grow ml-10 p-5 rounded-2xl border transition-all duration-300 cursor-pointer ${
-                          activeHighlight === '2015'
-                            ? 'bg-red-50/50 border-red-400 shadow-md scale-[1.01] ring-2 ring-red-100/50'
-                            : 'bg-white border-slate-200/80 hover:border-red-300 hover:shadow-md'
-                        }`}
-                      >
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-[10px] font-extrabold text-red-600 uppercase font-sans tracking-wider">Severe Error</span>
-                          <span className="font-mono text-xs font-bold text-slate-400">2015</span>
-                        </div>
-                        <h4 className="text-sm font-extrabold text-slate-800 font-rajdhani uppercase tracking-wide mb-1">Break in Ownership Chain</h4>
-                        <p className="text-xs text-slate-500 leading-relaxed mb-3">
-                          A title gap was identified in Doc No: 405/2015. Anand Sen sold the scheduled property to Vikram Shah, but public records indicate Rajesh Rao was the registered owner.
-                        </p>
-                        
-                        <div className="bg-red-50 border border-red-100/50 p-2.5 rounded-xl text-[10.5px] text-red-800">
-                          <strong>Recommendation:</strong> Perform manual title deed verification to trace the missing chain links between Rajesh Rao and Anand Sen.
-                        </div>
+                    {results?.anomalies?.length === 0 ? (
+                      <div className="p-6 text-center border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                        <span className="material-symbols-outlined text-slate-300 text-3xl mb-2">check_circle</span>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wide">No issues detected</p>
+                        <p className="text-[10px] text-slate-400 mt-1">This property's chain of title looks clear and secure.</p>
                       </div>
-                    </div>
-
-                    {/* Timeline Node & Card 2 (Warning Exception) */}
-                    <div className="relative flex gap-4 items-start mb-6">
-                      {/* Connected Indicator Dot */}
-                      <div className={`absolute left-3.5 top-6 w-3.5 h-3.5 rounded-full border-2 border-white shadow transition-all duration-300 z-10 ${
-                        activeHighlight === '2018' ? 'bg-orange-500 scale-125 ring-4 ring-orange-100' : 'bg-orange-500'
-                      }`}></div>
-                      
-                      <div 
-                        onMouseEnter={() => setActiveHighlight("2018")}
-                        onMouseLeave={() => setActiveHighlight(null)}
-                        onClick={() => setActiveHighlight("2018")}
-                        className={`flex-grow ml-10 p-5 rounded-2xl border transition-all duration-300 cursor-pointer ${
-                          activeHighlight === '2018'
-                            ? 'bg-orange-50/50 border-orange-400 shadow-md scale-[1.01] ring-2 ring-orange-100/50'
-                            : 'bg-white border-slate-200/80 hover:border-orange-300 hover:shadow-md'
-                        }`}
-                      >
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-[10px] font-extrabold text-orange-600 uppercase font-sans tracking-wider">Warning</span>
-                          <span className="font-mono text-xs font-bold text-slate-400">2018</span>
-                        </div>
-                        <h4 className="text-sm font-extrabold text-slate-800 font-rajdhani uppercase tracking-wide mb-1">Double Entry Detected</h4>
-                        <p className="text-xs text-slate-500 leading-relaxed mb-3">
-                          Concurrent mortgage registrations found on identical property bounds. Two separate home loans were registered on the same survey number without clear cross-collateralization records.
-                        </p>
+                    ) : (
+                      results?.anomalies?.map((anomaly, idx) => {
+                        const yearStr = anomaly.year ? String(anomaly.year) : "";
+                        const severityLower = anomaly.severity?.toLowerCase() || "low";
                         
-                        <div className="bg-orange-50 border border-orange-100/50 p-2.5 rounded-xl text-[10.5px] text-orange-800">
-                          <strong>Recommendation:</strong> Request physical No-Objection Certificate (NOC) and register standard discharge deeds with both banks.
-                        </div>
-                      </div>
-                    </div>
+                        let severityLabel = "Notice";
+                        let badgeColorClass = "bg-amber-500";
+                        let cardColorClass = "bg-white border-slate-200/80 hover:border-amber-300";
+                        let activeCardColorClass = "bg-amber-50/50 border-amber-400 ring-amber-100/50";
+                        let textColorClass = "text-amber-600";
+                        let recBgClass = "bg-amber-50 border-amber-100/50 text-amber-800";
 
-                    {/* Timeline Node & Card 3 (Notice Alert) */}
-                    <div className="relative flex gap-4 items-start">
-                      {/* Connected Indicator Dot */}
-                      <div className={`absolute left-3.5 top-6 w-3.5 h-3.5 rounded-full border-2 border-white shadow transition-all duration-300 z-10 ${
-                        activeHighlight === '2021' ? 'bg-amber-500 scale-125 ring-4 ring-amber-100' : 'bg-amber-500'
-                      }`}></div>
-                      
-                      <div 
-                        onMouseEnter={() => setActiveHighlight("2021")}
-                        onMouseLeave={() => setActiveHighlight(null)}
-                        onClick={() => setActiveHighlight("2021")}
-                        className={`flex-grow ml-10 p-5 rounded-2xl border transition-all duration-300 cursor-pointer ${
-                          activeHighlight === '2021'
-                            ? 'bg-amber-50/50 border-amber-400 shadow-md scale-[1.01] ring-2 ring-amber-100/50'
-                            : 'bg-white border-slate-200/80 hover:border-amber-300 hover:shadow-md'
-                        }`}
-                      >
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-[10px] font-extrabold text-amber-600 uppercase font-sans tracking-wider">Notice</span>
-                          <span className="font-mono text-xs font-bold text-slate-400">2021</span>
-                        </div>
-                        <h4 className="text-sm font-extrabold text-slate-800 font-rajdhani uppercase tracking-wide mb-1">Minor Name Anomaly</h4>
-                        <p className="text-xs text-slate-500 leading-relaxed mb-3">
-                          A discrepancy in the transferee's middle name initial was identified in Doc No: 1104/2021. Registered as "Priya Nair K." instead of "Priya Nair".
-                        </p>
-                        
-                        <div className="bg-amber-50 border border-amber-100/50 p-2.5 rounded-xl text-[10.5px] text-amber-800">
-                          <strong>Recommendation:</strong> Collect matching Aadhaar / PAN documentation or execute a name-clarification affidavit to prevent registry concerns.
-                        </div>
-                      </div>
-                    </div>
+                        if (severityLower === "high") {
+                          severityLabel = "Severe Error";
+                          badgeColorClass = "bg-red-500";
+                          cardColorClass = "bg-white border-slate-200/80 hover:border-red-300";
+                          activeCardColorClass = "bg-red-50/50 border-red-400 ring-red-100/50";
+                          textColorClass = "text-red-600";
+                          recBgClass = "bg-red-50 border-red-100/50 text-red-800";
+                        } else if (severityLower === "medium") {
+                          severityLabel = "Warning";
+                          badgeColorClass = "bg-orange-500";
+                          cardColorClass = "bg-white border-slate-200/80 hover:border-orange-300";
+                          activeCardColorClass = "bg-orange-50/50 border-orange-400 ring-orange-100/50";
+                          textColorClass = "text-orange-600";
+                          recBgClass = "bg-orange-50 border-orange-100/50 text-orange-800";
+                        }
 
+                        return (
+                          <div key={idx} className="relative flex gap-4 items-start mb-6 last:mb-0">
+                            {/* Connected Indicator Dot */}
+                            <div className={`absolute left-3.5 top-6 w-3.5 h-3.5 rounded-full border-2 border-white shadow transition-all duration-300 z-10 ${badgeColorClass} ${
+                              activeHighlight === yearStr ? 'scale-125 ring-4' : ''
+                            }`} style={{ ringColor: severityLower === 'high' ? '#fee2e2' : severityLower === 'medium' ? '#ffedd5' : '#fef3c7' }}></div>
+                            
+                            <div 
+                              onMouseEnter={() => setActiveHighlight(yearStr)}
+                              onMouseLeave={() => setActiveHighlight(null)}
+                              onClick={() => setActiveHighlight(yearStr)}
+                              className={`flex-grow ml-10 p-5 rounded-2xl border transition-all duration-300 cursor-pointer ${
+                                activeHighlight === yearStr
+                                  ? `${activeCardColorClass} shadow-md scale-[1.01] ring-2`
+                                  : `${cardColorClass} hover:shadow-md`
+                              }`}
+                            >
+                              <div className="flex justify-between items-center mb-1">
+                                <span className={`text-[10px] font-extrabold ${textColorClass} uppercase font-sans tracking-wider`}>{severityLabel}</span>
+                                <span className="font-mono text-xs font-bold text-slate-400">{anomaly.year}</span>
+                              </div>
+                              <h4 className="text-sm font-extrabold text-slate-800 font-rajdhani uppercase tracking-wide mb-1">
+                                {anomaly.type?.replace(/_/g, ' ') || "Deed Issue"}
+                              </h4>
+                              <p className="text-xs text-slate-500 leading-relaxed mb-3">
+                                {anomaly.description}
+                              </p>
+                              
+                              {anomaly.recommendation && (
+                                <div className={`${recBgClass} p-2.5 rounded-xl text-[10.5px]`}>
+                                  <strong>Recommendation:</strong> {anomaly.recommendation}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
 
@@ -1151,15 +1141,15 @@ export default function DashboardPage() {
                   <div className="grid grid-cols-3 gap-2">
                     <div onClick={() => setModalType('missing')} className="border border-slate-200/60 rounded-xl p-3.5 text-center cursor-pointer hover:bg-slate-50 transition-colors">
                       <div className="text-xs font-bold text-slate-400 font-sans uppercase">Missing</div>
-                      <div className="text-lg font-extrabold text-slate-800 mt-1">{summary?.missing_entries_count || 1}</div>
+                      <div className="text-lg font-extrabold text-slate-800 mt-1">{summary?.missing_entries_count ?? 0}</div>
                     </div>
                     <div onClick={() => setModalType('ownership')} className="border border-slate-200/60 rounded-xl p-3.5 text-center cursor-pointer hover:bg-slate-50 transition-colors">
                       <div className="text-xs font-bold text-slate-400 font-sans uppercase">Title</div>
-                      <div className="text-lg font-extrabold text-slate-800 mt-1">{summary?.ownership_issues_count || 1}</div>
+                      <div className="text-lg font-extrabold text-slate-800 mt-1">{summary?.ownership_issues_count ?? 0}</div>
                     </div>
                     <div onClick={() => setModalType('encumbrance')} className="border border-slate-200/60 rounded-xl p-3.5 text-center cursor-pointer hover:bg-slate-50 transition-colors">
                       <div className="text-xs font-bold text-slate-400 font-sans uppercase">Liens</div>
-                      <div className="text-lg font-extrabold text-slate-800 mt-1">{summary?.encumbrance_anomalies_count || 1}</div>
+                      <div className="text-lg font-extrabold text-slate-800 mt-1">{summary?.encumbrance_anomalies_count ?? 0}</div>
                     </div>
                   </div>
                 </div>
@@ -1344,7 +1334,7 @@ export default function DashboardPage() {
                             <td className="font-mono text-xs font-semibold">{anom.year}</td>
                             <td className="font-mono text-xs font-semibold">#{anom.entry_number}</td>
                             <td>
-                              <span className={`badge ${anom.severity.toLowerCase() === 'high' ? 'badge-high' : anom.severity.toLowerCase() === 'medium' ? 'badge-medium' : 'badge-low'}`}>
+                              <span className={`badge ${(anom.severity?.toLowerCase() || 'low') === 'high' ? 'badge-high' : (anom.severity?.toLowerCase() || 'low') === 'medium' ? 'badge-medium' : 'badge-low'}`}>
                                 {anom.severity}
                               </span>
                             </td>

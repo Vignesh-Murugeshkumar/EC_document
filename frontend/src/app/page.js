@@ -168,13 +168,13 @@ export default function LoginPage() {
       }
     } catch (err) {
       console.warn("Backend unavailable, using local quick bypass for:", email);
-      const subStatus = email.includes("premium") ? "premium" : "free";
-      const userRole = email.includes("admin") ? "admin" : "user";
+      const subStatus = email === "vigneshmurugeshkumar@gmail.com" ? "premium" : "free";
+      const userRole = email === "vigneshmurugeshkumar@gmail.com" ? "admin" : "user";
       
       const offlineUser = {
-        id: email === "admin@ec-app.in" ? "00000000-0000-0000-0000-000000000003" : (subStatus === "premium" ? "00000000-0000-0000-0000-000000000002" : "00000000-0000-0000-0000-000000000001"),
+        id: userRole === "admin" ? "00000000-0000-0000-0000-000000000003" : "00000000-0000-0000-0000-000000000001",
         email: email,
-        phone: email.includes("admin") ? "+919000000003" : (subStatus === "premium" ? "+919000000002" : "+919000000001"),
+        phone: userRole === "admin" ? "+919840000000" : "+919000000001",
         role: userRole,
         subscription_status: subStatus
       };
@@ -519,36 +519,14 @@ export default function LoginPage() {
               {showTestAccounts && (
                 <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-100 text-left mt-3.5 space-y-2.5 animate-fade-in">
                   <button 
-                    onClick={() => handleQuickLogin("test.free@ec-app.in", "TestFree@2025")}
-                    className="w-full flex justify-between items-center text-xs p-2.5 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 border-l-4 border-l-slate-400 hover:border-l-slate-500 shadow-sm transition-all hover:translate-x-1"
-                  >
-                    <div>
-                      <strong className="block text-slate-800 text-left font-semibold">Free Tier Tester</strong>
-                      <span className="text-[10px] text-slate-400 font-mono">test.free@ec-app.in</span>
-                    </div>
-                    <span className="material-symbols-outlined text-sm text-slate-400">arrow_forward</span>
-                  </button>
-
-                  <button 
-                    onClick={() => handleQuickLogin("test.premium@ec-app.in", "TestPremium@2025")}
+                    onClick={() => handleQuickLogin("vigneshmurugeshkumar@gmail.com", "bypass")}
                     className="w-full flex justify-between items-center text-xs p-2.5 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 border-l-4 border-l-orange-500 hover:border-l-orange-600 shadow-sm transition-all hover:translate-x-1"
                   >
                     <div>
-                      <strong className="block text-orange-600 text-left font-semibold">Premium Tier Tester</strong>
-                      <span className="text-[10px] text-slate-400 font-mono">test.premium@ec-app.in</span>
+                      <strong className="block text-orange-600 text-left font-semibold">Authorized Tester Bypass</strong>
+                      <span className="text-[10px] text-slate-400 font-mono">vigneshmurugeshkumar@gmail.com</span>
                     </div>
                     <span className="material-symbols-outlined text-sm text-orange-500">arrow_forward</span>
-                  </button>
-
-                  <button 
-                    onClick={() => handleQuickLogin("admin@ec-app.in", "AdminEC@2025")}
-                    className="w-full flex justify-between items-center text-xs p-2.5 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 border-l-4 border-l-slate-900 hover:border-l-black shadow-sm transition-all hover:translate-x-1"
-                  >
-                    <div>
-                      <strong className="block text-slate-900 text-left font-semibold">System Administrator</strong>
-                      <span className="text-[10px] text-slate-400 font-mono">admin@ec-app.in</span>
-                    </div>
-                    <span className="material-symbols-outlined text-sm text-slate-900">arrow_forward</span>
                   </button>
                 </div>
               )}
