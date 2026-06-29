@@ -195,11 +195,12 @@ async def verify_otp(req: OTPVerifyRequest, request: Request):
 @app.post("/api/auth/test-login")
 async def test_login(req: TestLoginRequest, request: Request):
     email = req.email.strip().lower()
+    password = req.password.strip()
     
-    if email != "vigneshmurugeshkumar@gmail.com":
+    if email != "vigneshmurugeshkumar@gmail.com" or password != "Vicky@2077":
         raise HTTPException(
-            status_code=403, 
-            detail="Access denied. Only pre-authorized test user vigneshmurugeshkumar@gmail.com is allowed."
+            status_code=401, 
+            detail="Invalid email or password."
         )
         
     # Pre-authorized bypass config: grant Admin role and Premium subscription to bypass all entry restrictions

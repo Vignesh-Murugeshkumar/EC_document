@@ -13,137 +13,25 @@ export default function LoginPage() {
   const [activeTab, setActiveTab] = useState("login");
   
   // Authentication states
-  const [phone, setPhone] = useState("");
-  const [otpDigits, setOtpDigits] = useState(["", "", "", "", "", ""]);
-  const [otpSent, setOtpSent] = useState(false);
-  const [resendTimer, setResendTimer] = useState(300); // 5 minutes
-  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [successInfo, setSuccessInfo] = useState("");
-  const [showTestAccounts, setShowTestAccounts] = useState(false);
-
-  // References for OTP auto-focus
-  const otpRefs = [
-    useRef(null), useRef(null), useRef(null), 
-    useRef(null), useRef(null), useRef(null)
-  ];
 
   const backendUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
-  // Resend OTP countdown timer
-  useEffect(() => {
-    if (!otpSent || resendTimer <= 0) return;
-    const timer = setInterval(() => {
-      setResendTimer((prev) => prev - 1);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [otpSent, resendTimer]);
-
-  const formatTimer = (secs) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${m}:${s < 10 ? '0' : ''}${s}`;
-  };
-
-  // Handle Send OTP
-  const handleSendOtp = async (e) => {
+  // Handle Login
+  const handleLogin = async (e) => {
     if (e) e.preventDefault();
     setError("");
     setLoading(true);
 
-    const cleanPhone = phone.replace(/\s+/g, "");
-    const fullPhone = cleanPhone.startsWith("+91") ? cleanPhone : `+91${cleanPhone}`;
-    
-    if (!/^\+91\d{10}$/.test(fullPhone)) {
-      setError("Please enter a valid 10-digit mobile number.");
+    if (!email || !password) {
+      setError("Please enter both email and password.");
       setLoading(false);
       return;
     }
-
-    try {
-      const response = await fetch(`${backendUrl}/api/auth/send-otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: fullPhone }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || "Failed to send OTP");
-      }
-
-      setOtpSent(true);
-      setResendTimer(300);
-      setSuccessInfo("Verification code sent! Enter '123456' for test accounts.");
-    } catch (err) {
-      console.warn("Failed to contact backend, running offline mock dispatch:", err);
-      setOtpSent(true);
-      setResendTimer(300);
-      setSuccessInfo("[Offline Mode] Verification code simulated. Use OTP '123456'.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Handle Verify OTP
-  const handleVerifyOtp = async (e) => {
-    if (e) e.preventDefault();
-    setError("");
-    setLoading(true);
-
-    const enteredOtp = otpDigits.join("");
-    if (enteredOtp.length !== 6) {
-      setError("Please enter the complete 6-digit verification code.");
-      setLoading(false);
-      return;
-    }
-
-    const cleanPhone = phone.replace(/\s+/g, "");
-    const fullPhone = cleanPhone.startsWith("+91") ? cleanPhone : `+91${cleanPhone}`;
-
-    try {
-      const response = await fetch(`${backendUrl}/api/auth/verify-otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: fullPhone, otp: enteredOtp, name: name || "Demo User" }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || "Invalid OTP code");
-      }
-
-      localStorage.setItem("ec_token", data.token);
-      localStorage.setItem("ec_user", JSON.stringify(data.user));
-      document.cookie = `ec_token=${data.token}; path=/; max-age=604800; SameSite=Lax`;
-      router.push("/dashboard");
-    } catch (err) {
-      console.warn("Verify OTP failed, falling back to local session generation:", err);
-      // Offline fallback login logic
-      if (enteredOtp === "123456" || enteredOtp === "654321") {
-        const dummyUser = {
-          id: "dummy-user-uid",
-          phone: fullPhone,
-          role: "user",
-          subscription_status: "free"
-        };
-        localStorage.setItem("ec_token", "offline-mock-jwt-token");
-        localStorage.setItem("ec_user", JSON.stringify(dummyUser));
-        document.cookie = "ec_token=offline-mock-jwt-token; path=/; max-age=604800; SameSite=Lax";
-        router.push("/dashboard");
-      } else {
-        setError("Invalid OTP code. Please enter '123456' for offline verification.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Handle Quick Login for Pre-authorised Test Accounts
-  const handleQuickLogin = async (email, password) => {
-    setError("");
-    setLoading(true);
 
     try {
       const response = await fetch(`${backendUrl}/api/auth/test-login`, {
@@ -154,7 +42,7 @@ export default function LoginPage() {
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.detail || "Test Login failed");
+        throw new Error(data.detail || "Invalid email or password.");
       }
 
       localStorage.setItem("ec_token", data.token);
@@ -168,46 +56,27 @@ export default function LoginPage() {
       }
     } catch (err) {
       console.warn("Backend unavailable, using local quick bypass for:", email);
-      const subStatus = email === "vigneshmurugeshkumar@gmail.com" ? "premium" : "free";
-      const userRole = email === "vigneshmurugeshkumar@gmail.com" ? "admin" : "user";
-      
-      const offlineUser = {
-        id: userRole === "admin" ? "00000000-0000-0000-0000-000000000003" : "00000000-0000-0000-0000-000000000001",
-        email: email,
-        phone: userRole === "admin" ? "+919840000000" : "+919000000001",
-        role: userRole,
-        subscription_status: subStatus
-      };
-      
-      localStorage.setItem("ec_token", `offline-token-${subStatus}`);
-      localStorage.setItem("ec_user", JSON.stringify(offlineUser));
-      document.cookie = `ec_token=offline-token-${subStatus}; path=/; max-age=604800; SameSite=Lax`;
-      
-      if (userRole === "admin") {
-        router.push("/admin");
-      } else {
+      if (email.trim().lower() === "vigneshmurugeshkumar@gmail.com" && password === "Vicky@2077") {
+        const subStatus = "premium";
+        const userRole = "admin";
+        
+        const offlineUser = {
+          id: "00000000-0000-0000-0000-000000000003",
+          email: email,
+          phone: "+919840000000",
+          role: userRole,
+          subscription_status: subStatus
+        };
+        
+        localStorage.setItem("ec_token", `offline-token-${subStatus}`);
+        localStorage.setItem("ec_user", JSON.stringify(offlineUser));
+        document.cookie = `ec_token=offline-token-${subStatus}; path=/; max-age=604800; SameSite=Lax`;
         router.push("/dashboard");
+      } else {
+        setError(err.message || "Invalid credentials.");
       }
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Handle OTP digit changes with focus shifting
-  const handleOtpInput = (index, value) => {
-    const cleanValue = value.replace(/\D/g, "").slice(-1);
-    const updated = [...otpDigits];
-    updated[index] = cleanValue;
-    setOtpDigits(updated);
-
-    if (cleanValue.length > 0 && index < 5) {
-      otpRefs[index + 1].current.focus();
-    }
-  };
-
-  const handleOtpKeyDown = (index, e) => {
-    if (e.key === "Backspace" && otpDigits[index] === "" && index > 0) {
-      otpRefs[index - 1].current.focus();
     }
   };
 
@@ -403,133 +272,38 @@ export default function LoginPage() {
                 </p>
               </div>
 
-              {/* Name field (Register only, before OTP sent) */}
-              {activeTab === "register" && !otpSent && (
-                <div className="space-y-1">
-                  <label className="block font-label-bold text-xs text-slate-600 font-bold">Your Name</label>
-                  <input 
-                    type="text" 
-                    placeholder="Enter your full name" 
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full px-4 py-2.5 outline-none border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all text-sm bg-slate-50 text-slate-900"
-                  />
-                </div>
-              )}
+              {/* Email Input */}
+              <div className="space-y-1 text-left">
+                <label className="block font-label-bold text-xs text-slate-600 font-bold">Email address</label>
+                <input 
+                  type="email" 
+                  placeholder="name@example.com" 
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-2.5 outline-none border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all text-sm bg-slate-50 text-slate-900 font-sans"
+                />
+              </div>
 
-              {/* Phone Input (before OTP sent) */}
-              {!otpSent && (
-                <div className="space-y-1">
-                  <label className="block font-label-bold text-xs text-slate-600 font-bold">Mobile number</label>
-                  <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden focus-within:border-orange-500 focus-within:ring-2 focus-within:ring-orange-100 transition-all bg-slate-50">
-                    <span className="bg-slate-100 px-4 py-2.5 font-mono text-sm border-r border-slate-200 text-slate-600">+91</span>
-                    <input 
-                      className="w-full px-4 py-2.5 outline-none font-mono text-sm placeholder:text-slate-400 text-slate-900 bg-transparent" 
-                      placeholder="98765 43210" 
-                      type="tel" 
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                    />
-                  </div>
-                </div>
-              )}
+              {/* Password Input */}
+              <div className="space-y-1 text-left">
+                <label className="block font-label-bold text-xs text-slate-600 font-bold">Password</label>
+                <input 
+                  type="password" 
+                  placeholder="••••••••" 
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-2.5 outline-none border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all text-sm bg-slate-50 text-slate-900 font-sans"
+                />
+              </div>
 
-              {/* OTP Input Grid */}
-              {otpSent && (
-                <div className="space-y-4">
-                  <div className="flex justify-between gap-2.5">
-                    {otpDigits.map((digit, i) => (
-                      <input 
-                        key={i}
-                        ref={otpRefs[i]}
-                        className="otp-input w-12 h-14 text-center text-xl font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all outline-none font-mono" 
-                        maxLength={1} 
-                        type="text" 
-                        value={digit}
-                        onChange={(e) => handleOtpInput(i, e.target.value)}
-                        onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                      />
-                    ))}
-                  </div>
-
-                  <div className="text-center">
-                    <p className="font-body-sm text-xs text-slate-500">
-                      {resendTimer > 0 ? (
-                        <span>Resend code in <strong className="font-mono text-orange-500 font-bold" id="timer">{formatTimer(resendTimer)}</strong></span>
-                      ) : (
-                        <button onClick={handleSendOtp} className="text-orange-500 font-bold hover:underline">Resend OTP</button>
-                      )}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* CTA Buttons */}
-              {!otpSent ? (
-                <button 
-                  onClick={handleSendOtp}
-                  disabled={loading}
-                  className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-md hover:shadow-lg transition-all py-3 rounded-xl font-headline-md text-sm font-bold active:scale-[0.98] duration-150 font-rajdhani uppercase tracking-wider"
-                >
-                  {loading ? "Sending..." : "Send OTP"}
-                </button>
-              ) : (
-                <div className="flex gap-2.5">
-                  <button 
-                    onClick={() => { setOtpSent(false); setOtpDigits(["", "", "", "", "", ""]); setError(""); }} 
-                    className="w-1/3 bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all py-3 rounded-xl font-bold text-sm"
-                  >
-                    Back
-                  </button>
-                  <button 
-                    onClick={handleVerifyOtp}
-                    disabled={loading}
-                    className="w-2/3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-md hover:shadow-lg transition-all py-3 rounded-xl font-headline-md text-sm font-bold active:scale-[0.98] duration-150 font-rajdhani uppercase tracking-wider"
-                  >
-                    {loading ? "Verifying..." : "Verify OTP"}
-                  </button>
-                </div>
-              )}
-
-              {/* Back / Change Phone option when OTP sent */}
-              {otpSent && (
-                <div className="text-center pt-1">
-                  <button 
-                    onClick={() => { setOtpSent(false); setOtpDigits(["", "", "", "", "", ""]); setError(""); }} 
-                    className="font-body-sm text-xs text-orange-500 font-semibold hover:underline"
-                  >
-                    Change Mobile Number
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Test accounts triggers */}
-            <div className="mt-6 pt-4 border-t border-slate-100 text-center">
-              <p className="font-body-md text-xs text-slate-500">
-                Pre-authorised tester?{" "}
-                <button 
-                  onClick={() => setShowTestAccounts(!showTestAccounts)} 
-                  className="text-orange-500 font-bold hover:underline focus:outline-none"
-                >
-                  Sign in with credentials
-                </button>
-              </p>
-
-              {showTestAccounts && (
-                <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-100 text-left mt-3.5 space-y-2.5 animate-fade-in">
-                  <button 
-                    onClick={() => handleQuickLogin("vigneshmurugeshkumar@gmail.com", "bypass")}
-                    className="w-full flex justify-between items-center text-xs p-2.5 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 border-l-4 border-l-orange-500 hover:border-l-orange-600 shadow-sm transition-all hover:translate-x-1"
-                  >
-                    <div>
-                      <strong className="block text-orange-600 text-left font-semibold">Authorized Tester Bypass</strong>
-                      <span className="text-[10px] text-slate-400 font-mono">vigneshmurugeshkumar@gmail.com</span>
-                    </div>
-                    <span className="material-symbols-outlined text-sm text-orange-500">arrow_forward</span>
-                  </button>
-                </div>
-              )}
+              {/* Submit Button */}
+              <button 
+                onClick={handleLogin}
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-md hover:shadow-lg transition-all py-3 rounded-xl font-headline-md text-sm font-bold active:scale-[0.98] duration-150 font-rajdhani uppercase tracking-wider mt-2"
+              >
+                {loading ? "Logging in..." : "Login"}
+              </button>
             </div>
 
           </div>
