@@ -263,12 +263,10 @@ export default function LoginPage() {
             <div className="space-y-5">
               <div className="text-center">
                 <h3 className="font-headline-lg text-xl font-bold text-slate-900 mb-1.5 font-rajdhani uppercase tracking-wide">
-                  {otpSent ? "Verify Mobile" : (activeTab === "register" ? "Create Account" : "Secure Login")}
+                  {activeTab === "register" ? "Create Account" : "Secure Login"}
                 </h3>
                 <p className="font-body-md text-xs text-slate-500 leading-normal">
-                  {otpSent 
-                    ? <span>Enter the 6-digit verification code sent to <strong className="text-slate-800 font-mono">+91 {phone}</strong></span>
-                    : "Analyze Indian property documents with institutional precision."}
+                  Analyze Indian property documents with institutional precision.
                 </p>
               </div>
 
