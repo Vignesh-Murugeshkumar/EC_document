@@ -628,7 +628,7 @@ def run_langgraph_pipeline(raw_text: str, page_texts: List[str], doc_id: str, us
         modal.Secret.from_name("supabase-secrets"),
         modal.Secret.from_name("openai-secret"),
     ],
-    timeout=300
+    timeout=600
 )
 def process_ec_document(doc_id: str, file_path_or_url: str, user_id: str, target_lang: str = "en", mode: str = "auto"):
     import urllib.request

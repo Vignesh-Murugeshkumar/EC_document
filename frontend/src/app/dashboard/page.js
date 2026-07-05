@@ -10,6 +10,8 @@ import {
   FilePlus, History, Settings, ChevronRight, X, Info, Eye
 } from "lucide-react";
 
+
+
 export default function DashboardPage() {
   const router = useRouter();
   const { t, locale, changeLanguage } = useTranslation();
@@ -312,8 +314,8 @@ export default function DashboardPage() {
           console.warn("Polling error:", pollErr);
         }
 
-        // Safeguard timeout (100 seconds)
-        if (pollCount > 50) {
+        // Safeguard timeout (10 minutes / 600 seconds)
+        if (pollCount > 300) {
           clearInterval(pollInterval);
           setUploading(false);
           alert("Analysis timed out. Please check recent history or retry.");
@@ -327,6 +329,7 @@ export default function DashboardPage() {
       setUploading(false);
     }
   };
+
 
   const handleSelectRecentDoc = async (doc) => {
     if (doc.analysis_results) {
@@ -411,6 +414,7 @@ export default function DashboardPage() {
           >
             My Documents
           </button>
+
           {user?.role === "admin" && (
             <button 
               onClick={() => router.push("/admin")} 
@@ -1248,6 +1252,7 @@ export default function DashboardPage() {
           </div>
         )}
 
+
       </main>
 
       {/* Bottom Navigation Bar (Mobile Only) */}
@@ -1276,6 +1281,7 @@ export default function DashboardPage() {
           <span className="font-semibold text-[9px] mt-0.5 uppercase tracking-wider">History</span>
         </button>
 
+
         <button 
           onClick={() => setActiveView("settings")}
           className={`flex flex-col items-center justify-center p-1.5 transition-all ${activeView === "settings" ? "text-orange-500 scale-105" : "text-slate-400"}`}
@@ -1283,6 +1289,7 @@ export default function DashboardPage() {
           <Settings size={20} />
           <span className="font-semibold text-[9px] mt-0.5 uppercase tracking-wider">Settings</span>
         </button>
+
       </nav>
 
       {/* Dialogue Modals */}
