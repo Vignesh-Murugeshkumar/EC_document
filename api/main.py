@@ -68,6 +68,71 @@ except Exception as e:
         
     supabase = MockClient()
 
+# Monkeypatch postgrest sync request builders to handle [Errno 16] Device or resource busy
+# and other transient connection/socket errors in serverless Vercel environments.
+try:
+    import postgrest
+    sync_rb = None
+    try:
+        import postgrest._sync.request_builder as sync_rb
+    except ImportError:
+        try:
+            import postgrest.request_builder as sync_rb
+        except ImportError:
+            pass
+            
+    if sync_rb:
+        for name in dir(sync_rb):
+            obj = getattr(sync_rb, name)
+            if isinstance(obj, type) and "execute" in obj.__dict__:
+                original_execute = obj.execute
+                
+                def make_wrapped_execute(orig_exec, class_name):
+                    def wrapped_execute(self, *args, **kwargs):
+                        import time
+                        import httpx
+                        global supabase
+                        
+                        max_retries = 3
+                        initial_delay = 0.5
+                        delay = initial_delay
+                        
+                        for attempt in range(max_retries):
+                            try:
+                                return orig_exec(self, *args, **kwargs)
+                            except Exception as e:
+                                is_conn_error = False
+                                # Catch httpx connection/OS/socket level errors
+                                if isinstance(e, (httpx.HTTPError, OSError)):
+                                    is_conn_error = True
+                                elif hasattr(e, "__cause__") and isinstance(e.__cause__, OSError):
+                                    is_conn_error = True
+                                    
+                                print(f"[Supabase Sync Query Attempt {attempt + 1} Failed] Class: {class_name} | Error: {str(e)}")
+                                
+                                if attempt == max_retries - 1:
+                                    raise e
+                                    
+                                if is_conn_error:
+                                    print("Recreating Supabase client to discard stale socket connections...")
+                                    try:
+                                        supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+                                        # Update the session reference on the current builder instance
+                                        if hasattr(supabase, "postgrest") and hasattr(supabase.postgrest, "session"):
+                                            self.session = supabase.postgrest.session
+                                            print("Updated builder session reference to new client session.")
+                                    except Exception as init_err:
+                                        print(f"Failed to recreate Supabase client: {str(init_err)}")
+                                        
+                                time.sleep(delay)
+                                delay *= 2
+                    return wrapped_execute
+                    
+                obj.execute = make_wrapped_execute(original_execute, name)
+                print(f"Monkeypatched {name}.execute successfully.")
+except Exception as patch_err:
+    print(f"Error applying postgrest execute monkeypatch: {str(patch_err)}")
+
 rzp_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
 
 # In-memory OTP Cache (phone -> {"otp": str, "expires_at": float})
@@ -88,6 +153,8 @@ class TierUpgradeRequest(BaseModel):
 class TestLoginRequest(BaseModel):
     email: str
     password: str
+
+
 
 # --- JWT Helpers ---
 def get_user_from_token(authorization: str = Header(None)) -> Dict[str, Any]:
@@ -755,3 +822,5 @@ async def retry_analysis(document_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to trigger analysis worker: {str(e)}")
         
     return {"status": "success", "message": "Retry scheduled successfully"}
+
+
