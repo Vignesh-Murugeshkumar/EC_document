@@ -22,6 +22,8 @@ image = (
 
 app = modal.App(name="ec-validator-worker", image=image)
 
+MODEL_NAME = os.environ.get("OPENAI_MODEL_NAME", "gpt-4o-mini")
+
 # Initialize OpenAI client helper
 def get_openai_client():
     from openai import OpenAI
@@ -220,7 +222,7 @@ def analyze_standard_mode(raw_text: str, target_lang: str = "en") -> Dict[str, A
     """
     
     response = client.beta.chat.completions.parse(
-        model="gpt-4o",
+        model=MODEL_NAME,
         messages=[
             {"role": "system", "content": "You are a helpful property document assistant."},
             {"role": "user", "content": prompt}
@@ -260,7 +262,7 @@ def extractor_node(state: AgentState) -> Dict[str, Any]:
         transactions: List[Transaction]
         
     response = client.beta.chat.completions.parse(
-        model="gpt-4o",
+        model=MODEL_NAME,
         messages=[
             {"role": "system", "content": "Extract transactions from the text layer of an EC document."},
             {"role": "user", "content": prompt}
@@ -289,7 +291,7 @@ def ownership_chain_node(state: AgentState) -> Dict[str, Any]:
         ownership_chain: List[OwnershipTransfer]
         
     response = client.beta.chat.completions.parse(
-        model="gpt-4o",
+        model=MODEL_NAME,
         messages=[
             {"role": "system", "content": "Reconstruct property ownership sequence and flag title gaps."},
             {"role": "user", "content": prompt}
@@ -328,7 +330,7 @@ def anomaly_detection_node(state: AgentState) -> Dict[str, Any]:
         anomalies: List[Anomaly]
         
     response = client.beta.chat.completions.parse(
-        model="gpt-4o",
+        model=MODEL_NAME,
         messages=[
             {"role": "system", "content": "Detect legal and factual anomalies in EC transactions."},
             {"role": "user", "content": prompt}
@@ -413,7 +415,7 @@ def report_generator_node(state: AgentState) -> Dict[str, Any]:
             anomalies: List[Anomaly]
             
         response = client.beta.chat.completions.parse(
-            model="gpt-4o",
+            model=MODEL_NAME,
             messages=[
                 {"role": "system", "content": "Translate the anomaly descriptions and recommendations to regional language."},
                 {"role": "user", "content": prompt}
