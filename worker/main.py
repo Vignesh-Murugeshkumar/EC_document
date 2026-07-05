@@ -46,8 +46,8 @@ class Transaction(BaseModel):
 
 class OwnershipTransfer(BaseModel):
     transaction_id: str = Field(..., description="The transaction entry_number that caused this transfer")
-    from_party: str = Field(..., description="The transferor or seller name")
-    to_party: str = Field(..., description="The transferee or buyer name")
+    from_party: str = Field(..., description="The transferor or seller name(s). If there are multiple, list them all comma-separated, sorted alphabetically (e.g., 'A, B')")
+    to_party: str = Field(..., description="The transferee or buyer name(s). If there are multiple, list them all comma-separated, sorted alphabetically (e.g., 'C, D')")
     year: int = Field(..., description="Year of transfer")
     status: str = Field(..., description="Status of this link (e.g., 'valid', 'gap_detected', 'conflict')")
 
@@ -200,6 +200,13 @@ def analyze_standard_mode(raw_text: str, target_lang: str = "en") -> Dict[str, A
     You are an expert Indian Property Law AI Analyzer. Analyze the following Encumbrance Certificate (EC) text.
     Extract the list of transactions, reconstruct the title ownership chain, and identify any anomalies.
     
+    Guidelines for Joint/Multiple Parties:
+    - If a transaction has multiple sellers or buyers, list all of them in from_party or to_party respectively.
+    - Format multiple names as a comma-separated list of normalized names, sorted in alphabetical order (e.g., "Amit Patel, Sunil Sharma").
+    - Clean and normalize names consistently (e.g. remove titles like Mr, Mrs, aliases, or spelling variations referring to the same person).
+    - Do not use symbols/conjunctions like "&", "and", "or", etc.
+    - When verifying ownership transfers and gaps: treat comma-separated lists of names as multiple joint owners. A transfer is valid if all sellers of the current transaction were in the buyer list of a previous transaction. If the property is owned jointly (e.g. "A, B"), a transfer of the entire property typically requires both to sell; if only "A" sells, flag it as a potential anomaly.
+    
     Anomalies to check for:
     - missing_entries: gaps in transaction dates or years where ownership status is unclear.
     - duplicate_entries: duplicate transaction entries.
@@ -283,6 +290,12 @@ def ownership_chain_node(state: AgentState) -> Dict[str, Any]:
     Based on the following transactions, reconstruct the chain of ownership (from earliest to latest).
     Identify transfers and trace who owns the property at any point in time. Check for gaps or conflicts.
     
+    Guidelines for Joint/Multiple Parties:
+    - If a transaction has multiple sellers or buyers, list all of them in from_party or to_party respectively.
+    - Format multiple names as a comma-separated list of normalized names, sorted in alphabetical order (e.g., "Amit Patel, Sunil Sharma").
+    - Clean and normalize names consistently (e.g. remove titles like Mr, Mrs, aliases, or spelling variations referring to the same person).
+    - Do not use symbols/conjunctions like "&", "and", "or", etc.
+    
     Transactions:
     {json.dumps(state["transactions"], indent=2)}
     """
@@ -310,6 +323,11 @@ def anomaly_detection_node(state: AgentState) -> Dict[str, Any]:
     
     prompt = f"""
     Review the transactions and ownership chain to identify anomalies.
+    
+    Guidelines for Joint/Multiple Owners:
+    - A transfer is valid if all sellers of the current transaction are registered owners (they were in the buyer list of a previous transaction).
+    - If the property is owned jointly (e.g. "A, B"), a transfer of the entire property typically requires both to sell. If only "A" sells, flag it as a potential anomaly or partial transfer.
+    - Treat comma-separated lists of names as multiple owners. When verifying if a seller previously bought the property, split the comma-separated names and match them individually.
     
     Anomaly Types to look for:
     - missing_entries: Gaps in the ownership chain or timeline.
