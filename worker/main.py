@@ -22,7 +22,7 @@ image = (
 
 app = modal.App(name="ec-validator-worker", image=image)
 
-MODEL_NAME = os.environ.get("OPENAI_MODEL_NAME", "gpt-4o-mini")
+MODEL_NAME = os.environ.get("OPENAI_MODEL_NAME", "gpt-4o")
 
 # Initialize OpenAI client helper
 def get_openai_client():
@@ -117,7 +117,6 @@ def log_audit(user_id: str, action: str, doc_id: str, metadata: Dict[str, Any] =
 # Native PDF Text Layer Extractor
 def extract_pdf_text_native(file_path: str) -> Dict[str, Any]:
     import PyPDF2
-    from pdfminer.high_level import extract_text
     
     try:
         # 1. Page count check
@@ -125,18 +124,21 @@ def extract_pdf_text_native(file_path: str) -> Dict[str, Any]:
             reader = PyPDF2.PdfReader(f)
             page_count = len(reader.pages)
             
-        if page_count > 200:
-            return {"error": "max_pages_exceeded", "message": f"This document exceeds the 200-page limit ({page_count} pages). Please upload a shorter EC."}
-            
-        # 2. Text extraction
-        text = extract_text(file_path)
+            if page_count > 200:
+                return {"error": "max_pages_exceeded", "message": f"This document exceeds the 200-page limit ({page_count} pages). Please upload a shorter EC."}
+                
+            # 2. Text extraction page-by-page
+            page_texts = []
+            for page in reader.pages:
+                page_texts.append(page.extract_text() or "")
+                
+        text = "\n".join(page_texts)
         
         # 3. Native Text check (scanned vs. digital)
-        # We check characters count. If it's less than 100 characters overall, or average < 40 chars per page, it's scanned
         if not text or len(text.strip()) < 100 or (len(text.strip()) / page_count) < 40:
             return {"error": "unsupported_pdf_type", "message": "This PDF appears to be a scanned document. The EC Analysis tool only supports digitally generated PDFs with a selectable text layer. Please obtain a digital copy from the sub-registrar's office and try again."}
             
-        return {"text": text, "page_count": page_count}
+        return {"text": text, "page_texts": page_texts, "page_count": page_count}
         
     except Exception as e:
         return {"error": "extraction_failed", "message": f"Failed to parse PDF: {str(e)}"}
@@ -173,6 +175,63 @@ def estimate_transaction_count(raw_text: str) -> int:
     
     return max(1, estimated)
 
+# Chunked Transaction Extractor Helper
+def extract_transactions_chunked(page_texts: List[str]) -> List[Dict[str, Any]]:
+    client = get_openai_client()
+    
+    chunk_size = 5
+    chunks = [page_texts[i:i + chunk_size] for i in range(0, len(page_texts), chunk_size)]
+    
+    all_transactions = []
+    
+    class ExtractedTransactions(BaseModel):
+        transactions: List[Transaction]
+        
+    for idx, chunk in enumerate(chunks):
+        chunk_text = f"\n--- Page Group {idx * chunk_size + 1} to {min((idx + 1) * chunk_size, len(page_texts))} ---\n"
+        chunk_text += "\n".join(chunk)
+        
+        # Clean up excessive whitespace/newlines to save tokens
+        chunk_text = re.sub(r'\n\s*\n', '\n', chunk_text)
+        
+        prompt = f"""
+        Extract all transaction entries from the following Encumbrance Certificate (EC) text chunk.
+        
+        Guidelines:
+        - For each transaction, extract: entry number, date, year, transaction type (e.g. Sale Deed, Mortgage, Gift, Release), parties involved and their roles (e.g. Seller, Buyer, Mortgagor, Mortgagee), survey number, property description, and amount.
+        - Ensure every transaction found in the text is fully represented.
+        
+        EC Text Chunk:
+        {chunk_text}
+        """
+        
+        response = client.beta.chat.completions.parse(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": "Extract transactions from the text layer of an EC document chunk."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format=ExtractedTransactions,
+            temperature=0.1
+        )
+        
+        data = json.loads(response.choices[0].message.content)
+        all_transactions.extend(data.get("transactions", []))
+        
+    # Sort transactions by entry number
+    def get_sort_key(tx):
+        match = re.search(r'\d+', str(tx.get("entry_number", "")))
+        if match:
+            return (int(match.group()), tx.get("year", 0))
+        return (999999, tx.get("year", 0))
+        
+    try:
+        all_transactions.sort(key=get_sort_key)
+    except Exception:
+        pass
+        
+    return all_transactions
+
 # Mode Resolution Logic
 def resolve_analysis_mode(mode: str, estimated_transaction_count: int) -> str:
     """
@@ -193,12 +252,15 @@ def resolve_analysis_mode(mode: str, estimated_transaction_count: int) -> str:
         return "multi_agent"
 
 # ----------------- Mode 1: Standard AI Model parser -----------------
-def analyze_standard_mode(raw_text: str, target_lang: str = "en") -> Dict[str, Any]:
+def analyze_standard_mode(page_texts: List[str], target_lang: str = "en") -> Dict[str, Any]:
+    # 1. Extract transactions in chunks
+    transactions = extract_transactions_chunked(page_texts)
+    
+    # 2. Call OpenAI to reconstruct ownership chain and detect anomalies
     client = get_openai_client()
     
     prompt = f"""
-    You are an expert Indian Property Law AI Analyzer. Analyze the following Encumbrance Certificate (EC) text.
-    Extract the list of transactions, reconstruct the title ownership chain, and identify any anomalies.
+    You are an expert Indian Property Law AI Analyzer. Reconstruct the title ownership chain and identify anomalies based on the following extracted transactions.
     
     Guidelines for Joint/Multiple Parties:
     - If a transaction has multiple sellers or buyers, list all of them in from_party or to_party respectively.
@@ -222,10 +284,10 @@ def analyze_standard_mode(raw_text: str, target_lang: str = "en") -> Dict[str, A
     - Deduct 5 points for each LOW severity anomaly (duplicates, date inconsistencies).
     - Minimum score is 0.
     
-    If the target language is not 'en' (English), write the descriptions and recommendations of the anomalies and properties in the requested target language: '{target_lang}'.
+    If the target language is not 'en' (English), write the descriptions and recommendations of the anomalies in the requested target language: '{target_lang}'.
     
-    EC Text:
-    {raw_text}
+    Transactions:
+    {json.dumps(transactions, indent=2)}
     """
     
     response = client.beta.chat.completions.parse(
@@ -238,13 +300,17 @@ def analyze_standard_mode(raw_text: str, target_lang: str = "en") -> Dict[str, A
         temperature=0.1
     )
     
-    return json.loads(response.choices[0].message.content)
+    report_data = json.loads(response.choices[0].message.content)
+    # Ensure transactions from chunked extractor are used
+    report_data["transactions"] = transactions
+    return report_data
 
 
 # ----------------- Mode 2: LangGraph Multi-Agent Architecture -----------------
 # Define Agent State
 class AgentState(TypedDict):
     raw_text: str
+    page_texts: List[str]
     doc_id: str
     user_lang: str
     transactions: List[Dict[str, Any]]
@@ -255,31 +321,8 @@ class AgentState(TypedDict):
 # Extractor Agent
 def extractor_node(state: AgentState) -> Dict[str, Any]:
     update_db_status(state["doc_id"], "extracting")
-    client = get_openai_client()
-    
-    prompt = f"""
-    Extract all transaction entries from the following Encumbrance Certificate (EC) text.
-    For each transaction, extract: entry number, date, year, transaction type (e.g. Sale Deed, Mortgage, Gift, Release), parties involved and their roles (e.g. Seller, Buyer, Mortgagor, Mortgagee), survey number, property description, and amount.
-    
-    EC Text:
-    {state["raw_text"]}
-    """
-    
-    class ExtractedTransactions(BaseModel):
-        transactions: List[Transaction]
-        
-    response = client.beta.chat.completions.parse(
-        model=MODEL_NAME,
-        messages=[
-            {"role": "system", "content": "Extract transactions from the text layer of an EC document."},
-            {"role": "user", "content": prompt}
-        ],
-        response_format=ExtractedTransactions,
-        temperature=0.1
-    )
-    
-    data = json.loads(response.choices[0].message.content)
-    return {"transactions": data["transactions"]}
+    transactions = extract_transactions_chunked(state["page_texts"])
+    return {"transactions": transactions}
 
 # Ownership Chain Agent
 def ownership_chain_node(state: AgentState) -> Dict[str, Any]:
@@ -447,7 +490,7 @@ def report_generator_node(state: AgentState) -> Dict[str, Any]:
     return {}
 
 # Orchestrate LangGraph execution flow
-def run_langgraph_pipeline(raw_text: str, doc_id: str, user_lang: str) -> Dict[str, Any]:
+def run_langgraph_pipeline(raw_text: str, page_texts: List[str], doc_id: str, user_lang: str) -> Dict[str, Any]:
     from langgraph.graph import StateGraph, END
     
     workflow = StateGraph(AgentState)
@@ -473,6 +516,7 @@ def run_langgraph_pipeline(raw_text: str, doc_id: str, user_lang: str) -> Dict[s
     
     initial_state = {
         "raw_text": raw_text,
+        "page_texts": page_texts,
         "doc_id": doc_id,
         "user_lang": user_lang,
         "transactions": [],
@@ -541,10 +585,10 @@ def process_ec_document(doc_id: str, file_path_or_url: str, user_id: str, target
         # 4. Analyze based on resolved Mode
         if resolved_mode == "standard":
             update_db_status(doc_id, "analysing")
-            report_data = analyze_standard_mode(raw_text, target_lang)
+            report_data = analyze_standard_mode(extraction["page_texts"], target_lang)
         else:
             # Multi-agent LangGraph mode
-            report_data = run_langgraph_pipeline(raw_text, doc_id, target_lang)
+            report_data = run_langgraph_pipeline(raw_text, extraction["page_texts"], doc_id, target_lang)
             
         # 5. Save results to Database
         health = report_data.get("summary", {}).get("health_score", 100)
