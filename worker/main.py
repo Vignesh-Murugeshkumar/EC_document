@@ -260,12 +260,43 @@ def extract_transactions_chunked(page_texts: List[str]) -> List[Dict[str, Any]]:
                 deduplicated[idx] = tx
                 seen_entries[entry_normalized] = tx
                 
-    # Sort final transactions by entry number
+    # Sort final transactions chronologically by year, month, day, and entry number
     def get_sort_key(tx):
-        match = re.search(r'\d+', str(tx.get("entry_number", "")))
-        if match:
-            return (int(match.group()), tx.get("year", 0))
-        return (999999, tx.get("year", 0))
+        try:
+            year = int(tx.get("year", 0))
+        except (ValueError, TypeError):
+            year = 0
+            
+        date_str = str(tx.get("date", "")).strip()
+        month = 0
+        day = 0
+        
+        # Match YYYY-MM-DD
+        match_ymd = re.match(r'^(\d{4})[-/](\d{1,2})[-/](\d{1,2})', date_str)
+        if match_ymd:
+            year_val = int(match_ymd.group(1))
+            month = int(match_ymd.group(2))
+            day = int(match_ymd.group(3))
+            if year == 0:
+                year = year_val
+        else:
+            # Match DD-MM-YYYY or DD/MM/YYYY
+            match_dmy = re.match(r'^(\d{1,2})[-/](\d{1,2})[-/](\d{4})', date_str)
+            if match_dmy:
+                day = int(match_dmy.group(1))
+                month = int(match_dmy.group(2))
+                year_val = int(match_dmy.group(3))
+                if year == 0:
+                    year = year_val
+                    
+        # Extract integer from entry number as final tie-breaker
+        entry_number_val = 999999
+        entry_str = str(tx.get("entry_number", ""))
+        match_entry = re.search(r'\d+', entry_str)
+        if match_entry:
+            entry_number_val = int(match_entry.group())
+            
+        return (year, month, day, entry_number_val)
         
     try:
         deduplicated.sort(key=get_sort_key)
@@ -345,6 +376,15 @@ def analyze_standard_mode(page_texts: List[str], target_lang: str = "en") -> Dic
     report_data = json.loads(response.choices[0].message.content)
     # Ensure transactions from chunked extractor are used
     report_data["transactions"] = transactions
+    
+    # Sort standard mode ownership chain by year
+    chain = report_data.get("ownership_chain", [])
+    try:
+        chain.sort(key=lambda x: int(x.get("year", 0)))
+    except Exception:
+        pass
+    report_data["ownership_chain"] = chain
+    
     return report_data
 
 
@@ -399,7 +439,12 @@ def ownership_chain_node(state: AgentState) -> Dict[str, Any]:
     )
     
     data = json.loads(response.choices[0].message.content)
-    return {"ownership_chain": data["ownership_chain"]}
+    chain = data.get("ownership_chain", [])
+    try:
+        chain.sort(key=lambda x: int(x.get("year", 0)))
+    except Exception:
+        pass
+    return {"ownership_chain": chain}
 
 # Anomaly Detection Agent
 def anomaly_detection_node(state: AgentState) -> Dict[str, Any]:
