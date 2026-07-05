@@ -35,14 +35,14 @@ class Party(BaseModel):
     role: str = Field(..., description="Role of the party (e.g., Seller, Buyer, Mortgagor, Mortgagee, Donor, Donee)")
 
 class Transaction(BaseModel):
-    entry_number: str = Field(..., description="Unique entry number of the transaction in the EC")
-    date: str = Field(..., description="Date of the transaction in YYYY-MM-DD or DD-MM-YYYY format as written")
-    year: int = Field(..., description="Year of the transaction")
-    transaction_type: str = Field(..., description="Type of transaction (e.g., Sale Deed, Mortgage, Release, Gift, Partition)")
-    parties: List[Party] = Field(..., description="List of parties involved and their roles")
-    survey_number: str = Field(..., description="Survey or plot number(s) mentioned")
-    property_description: str = Field(..., description="Description of property details (boundaries, area, dimensions)")
-    amount: str = Field(..., description="Transaction or consideration amount mentioned, or 'N/A'")
+    entry_number: str = Field(..., description="Unique entry number of the transaction in the EC. If not specified, assign a sequential placeholder like 'N/A'")
+    date: str = Field(..., description="Date of the transaction. If not specified, use 'N/A'")
+    year: int = Field(..., description="Year of the transaction. If not specified or not numeric, use 0")
+    transaction_type: str = Field(..., description="Type of transaction (e.g., Sale Deed, Mortgage, Release). If not specified, use 'Unknown'")
+    parties: List[Party] = Field(default=[], description="List of parties involved and their roles. If none specified, use an empty list")
+    survey_number: str = Field(..., description="Survey or plot number(s) mentioned. If none specified, use 'N/A'")
+    property_description: str = Field(..., description="Description of property details. If none specified, use 'N/A'")
+    amount: str = Field(..., description="Transaction or consideration amount. If none specified, use 'N/A'")
 
 class OwnershipTransfer(BaseModel):
     transaction_id: str = Field(..., description="The transaction entry_number that caused this transfer")
@@ -179,16 +179,30 @@ def estimate_transaction_count(raw_text: str) -> int:
 def extract_transactions_chunked(page_texts: List[str]) -> List[Dict[str, Any]]:
     client = get_openai_client()
     
+    # Use sliding-window chunking (chunk_size=5, overlap=1) to prevent boundary cutoffs
     chunk_size = 5
-    chunks = [page_texts[i:i + chunk_size] for i in range(0, len(page_texts), chunk_size)]
+    overlap = 1
     
+    chunks = []
+    i = 0
+    while i < len(page_texts):
+        chunk = page_texts[i : i + chunk_size]
+        chunks.append((i, chunk))
+        i += chunk_size - overlap
+        if i >= len(page_texts) - overlap:
+            break
+            
+    # Capture any remaining pages at the end
+    if i < len(page_texts):
+        chunks.append((i, page_texts[i:]))
+        
     all_transactions = []
     
     class ExtractedTransactions(BaseModel):
         transactions: List[Transaction]
         
-    for idx, chunk in enumerate(chunks):
-        chunk_text = f"\n--- Page Group {idx * chunk_size + 1} to {min((idx + 1) * chunk_size, len(page_texts))} ---\n"
+    for start_idx, chunk in chunks:
+        chunk_text = f"\n--- Pages {start_idx + 1} to {start_idx + len(chunk)} ---\n"
         chunk_text += "\n".join(chunk)
         
         # Clean up excessive whitespace/newlines to save tokens
@@ -197,9 +211,10 @@ def extract_transactions_chunked(page_texts: List[str]) -> List[Dict[str, Any]]:
         prompt = f"""
         Extract all transaction entries from the following Encumbrance Certificate (EC) text chunk.
         
-        Guidelines:
-        - For each transaction, extract: entry number, date, year, transaction type (e.g. Sale Deed, Mortgage, Gift, Release), parties involved and their roles (e.g. Seller, Buyer, Mortgagor, Mortgagee), survey number, property description, and amount.
-        - Ensure every transaction found in the text is fully represented.
+        CRITICAL GUIDELINES:
+        - Do not summarize or skip any transaction. Every single transaction entry mentioned in the text must be extracted.
+        - If a transaction is incomplete or cutoff at the start or end of this chunk, extract whatever details are present.
+        - For each transaction, extract: entry number, date, year, transaction type (e.g. Sale Deed, Mortgage, Gift, Release), parties involved and their roles, survey number, property description, and amount.
         
         EC Text Chunk:
         {chunk_text}
@@ -218,7 +233,34 @@ def extract_transactions_chunked(page_texts: List[str]) -> List[Dict[str, Any]]:
         data = json.loads(response.choices[0].message.content)
         all_transactions.extend(data.get("transactions", []))
         
-    # Sort transactions by entry number
+    # Deduplicate transactions extracted from overlapping boundaries
+    seen_entries = {}
+    deduplicated = []
+    
+    for tx in all_transactions:
+        # Normalize entry_number (strip whitespace, lowercase, remove punctuation)
+        entry_raw = str(tx.get("entry_number", "")).strip().lower()
+        entry_normalized = re.sub(r'[^a-z0-9]', '', entry_raw)
+        
+        # Fallback hash if entry number is missing
+        if not entry_normalized:
+            parties_str = "".join([p.get("name", "").lower() for p in tx.get("parties", [])])
+            entry_normalized = hashlib.sha256(f"{tx.get('date')}{tx.get('transaction_type')}{tx.get('amount')}{parties_str}".encode()).hexdigest()
+            
+        if entry_normalized not in seen_entries:
+            seen_entries[entry_normalized] = tx
+            deduplicated.append(tx)
+        else:
+            # If we see it again, retain the one with the more detailed property description
+            existing = seen_entries[entry_normalized]
+            existing_desc_len = len(str(existing.get("property_description", "")))
+            new_desc_len = len(str(tx.get("property_description", "")))
+            if new_desc_len > existing_desc_len:
+                idx = deduplicated.index(existing)
+                deduplicated[idx] = tx
+                seen_entries[entry_normalized] = tx
+                
+    # Sort final transactions by entry number
     def get_sort_key(tx):
         match = re.search(r'\d+', str(tx.get("entry_number", "")))
         if match:
@@ -226,11 +268,11 @@ def extract_transactions_chunked(page_texts: List[str]) -> List[Dict[str, Any]]:
         return (999999, tx.get("year", 0))
         
     try:
-        all_transactions.sort(key=get_sort_key)
+        deduplicated.sort(key=get_sort_key)
     except Exception:
         pass
         
-    return all_transactions
+    return deduplicated
 
 # Mode Resolution Logic
 def resolve_analysis_mode(mode: str, estimated_transaction_count: int) -> str:
