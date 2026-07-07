@@ -91,10 +91,12 @@ try:
                     def wrapped_execute(self, *args, **kwargs):
                         import time
                         import httpx
+                        import socket
+                        from urllib.parse import urlparse
                         global supabase
                         
-                        max_retries = 3
-                        initial_delay = 0.5
+                        max_retries = 5
+                        initial_delay = 0.3
                         delay = initial_delay
                         
                         for attempt in range(max_retries):
@@ -114,6 +116,13 @@ try:
                                     raise e
                                     
                                 if is_conn_error:
+                                    # DNS warmup: force a fresh getaddrinfo call to clear EBUSY state
+                                    try:
+                                        host = urlparse(SUPABASE_URL).hostname
+                                        socket.getaddrinfo(host, 443, socket.AF_INET, socket.SOCK_STREAM)
+                                    except OSError:
+                                        pass  # If DNS warmup itself fails, the retry will catch it
+                                    
                                     print("Recreating Supabase client to discard stale socket connections...")
                                     try:
                                         supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
