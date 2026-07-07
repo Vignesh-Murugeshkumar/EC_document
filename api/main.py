@@ -417,7 +417,8 @@ async def upload_document(
     try:
         import modal
         f = modal.Function.from_name("ec-validator-worker", "process_ec_document")
-        f.spawn(doc_id, pdf_signed_url, user["sub"], language, mode)
+        is_premium = user.get("subscription_status", "free") == "premium"
+        f.spawn(doc_id, pdf_signed_url, user["sub"], language, mode, is_premium)
     except Exception as e:
         print(f"[WORKER TRIGGER FAILURE] Failing analysis request: {str(e)}")
         # Cleanup uploaded file from storage
@@ -810,13 +811,17 @@ async def retry_analysis(document_id: str):
     signed_url_resp = supabase.storage.from_("ec-documents").create_signed_url(storage_path, 900)
     pdf_signed_url = signed_url_resp["signedURL"]
     
+    # Look up document owner's subscription status for premium flag
+    owner_profile = supabase.table("profiles").select("subscription_status").eq("id", doc["owner_id"]).execute()
+    is_premium = (owner_profile.data and owner_profile.data[0].get("subscription_status") == "premium")
+    
     # Trigger worker again
     supabase.table("ec_documents").update({"status": "queued", "error_code": None, "error_message": None}).eq("id", document_id).execute()
     
     try:
         import modal
         f = modal.Function.from_name("ec-validator-worker", "process_ec_document")
-        f.spawn(document_id, pdf_signed_url, doc["owner_id"], "en", doc.get("analysis_mode", "standard"))
+        f.spawn(document_id, pdf_signed_url, doc["owner_id"], "en", doc.get("analysis_mode", "standard"), is_premium)
     except Exception as e:
         supabase.table("ec_documents").update({"status": "error", "error_code": "worker_retrigger_failed", "error_message": str(e)}).eq("id", document_id).execute()
         raise HTTPException(status_code=500, detail=f"Failed to trigger analysis worker: {str(e)}")
