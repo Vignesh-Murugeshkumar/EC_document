@@ -45,10 +45,9 @@ export default function LoginPage() {
         console.error("Failed to initialize Supabase client on auth page:", err);
       }
     };
-    if (backendUrl) {
-      initSupabase();
-    }
+    initSupabase();
   }, [backendUrl]);
+
 
   // Handle Login
   const handleLogin = async (e) => {
