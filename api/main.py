@@ -14,6 +14,35 @@ import PyPDF2
 from supabase import create_client, Client
 import razorpay
 
+# Custom .env loader to load local environment variables before config resolution
+def load_env():
+    possible_paths = [
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
+        os.path.join(os.getcwd(), ".env"),
+        ".env"
+    ]
+    for path in possible_paths:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            key, val = line.split("=", 1)
+                            key = key.strip()
+                            val = val.strip()
+                            # Strip quotes
+                            if val.startswith(('"', "'")) and val.endswith(('"', "'")):
+                                val = val[1:-1]
+                            if key not in os.environ:
+                                os.environ[key] = val
+                print(f"[load_env] Successfully loaded environment from {path}")
+                break
+            except Exception as e:
+                print(f"[load_env] Error loading env from {path}: {e}")
+
+load_env()
+
 app = FastAPI(title="EC Analysis API", version="1.0.0")
 
 # Enable CORS for Next.js Frontend
@@ -41,6 +70,7 @@ JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "super-secret-jwt-signing-key
 RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "rzp_test_mock")
 RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "mock_secret")
 RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "mock_webhook_secret")
+
 
 # Initialize Supabase client lazily to avoid stale httpx connection pools
 # across Vercel Lambda warm starts (prevents [Errno 16] Device or resource busy)
@@ -538,19 +568,23 @@ async def health_check():
 # --- Dynamic Supabase Configuration endpoint for frontend Realtime ---
 @app.get("/api/config")
 async def get_config():
-    # Generate a temporary anon JWT using the shared JWT_SECRET
-    # Realtime socket connections require a valid anon key to connect
-    payload = {
-        "role": "anon",
-        "iss": "supabase",
-        "iat": int(time.time()),
-        "exp": int(time.time()) + 86400 * 365 # 1 year expiry
-    }
-    anon_key = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    # If the official Supabase Anon Key is defined in environment, return it directly
+    anon_key = os.environ.get("SUPABASE_ANON_KEY", "")
+    if not anon_key:
+        # Otherwise, fall back to dynamically generating a temporary anon JWT using the shared JWT_SECRET
+        payload = {
+            "role": "anon",
+            "iss": "supabase",
+            "iat": int(time.time()),
+            "exp": int(time.time()) + 86400 * 365 # 1 year expiry
+        }
+        anon_key = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+        
     return {
         "supabaseUrl": SUPABASE_URL,
         "supabaseAnonKey": anon_key
     }
+
 
 # --- Unified Paywall Configuration & Entitlement Layer ---
 def apply_paywall_redaction(results: Dict[str, Any], sub_tier: str) -> Dict[str, Any]:
