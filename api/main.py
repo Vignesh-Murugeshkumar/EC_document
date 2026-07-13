@@ -25,6 +25,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def refresh_supabase_client_middleware(request: Request, call_next):
+    try:
+        get_supabase()
+    except Exception as e:
+        print(f"[Middleware Supabase Refresh Error] {str(e)}")
+    response = await call_next(request)
+    return response
+
 # Load configuration from environment
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://mock-supabase.supabase.co")
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "mock-key")
@@ -33,16 +42,52 @@ RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "rzp_test_mock")
 RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "mock_secret")
 RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "mock_webhook_secret")
 
-# Initialize clients
+# Initialize Supabase client lazily to avoid stale httpx connection pools
+# across Vercel Lambda warm starts (prevents [Errno 16] Device or resource busy)
+_supabase_client: Client = None
+_supabase_client_created_at: float = 0
+_SUPABASE_CLIENT_TTL = 30  # Recreate client every 30 seconds to prevent stale sockets
+
+def get_supabase() -> Client:
+    """Return a Supabase client, creating a fresh one if stale or missing."""
+    global _supabase_client, _supabase_client_created_at, supabase
+    now = time.time()
+    if _supabase_client is None or (now - _supabase_client_created_at) > _SUPABASE_CLIENT_TTL:
+        try:
+            if _supabase_client is not None:
+                try:
+                    if hasattr(_supabase_client, "postgrest") and hasattr(_supabase_client.postgrest, "session"):
+                        _supabase_client.postgrest.session.close()
+                except Exception:
+                    pass
+                try:
+                    if hasattr(_supabase_client, "storage") and hasattr(_supabase_client.storage, "session"):
+                        _supabase_client.storage.session.close()
+                except Exception:
+                    pass
+            _supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+            _supabase_client_created_at = now
+            supabase = _supabase_client
+        except Exception as e:
+            print(f"\n[SUPABASE INITIALIZATION ERROR] {str(e)}\n")
+            if _supabase_client is None:
+                raise
+    return _supabase_client
+
+# Backward-compatible global reference (used by monkeypatch and existing code)
 try:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    _supabase_client = supabase
+    _supabase_client_created_at = time.time()
 except Exception as e:
     print(f"\n[SUPABASE INITIALIZATION ERROR] Running with mock Client fallback: {str(e)}\n")
     class MockTable:
         def select(self, *args, **kwargs): return self
         def insert(self, *args, **kwargs): return self
         def update(self, *args, **kwargs): return self
+        def delete(self, *args, **kwargs): return self
         def eq(self, *args, **kwargs): return self
+        def neq(self, *args, **kwargs): return self
         def order(self, *args, **kwargs): return self
         def limit(self, *args, **kwargs): return self
         def execute(self):
@@ -67,6 +112,7 @@ except Exception as e:
         def storage(self): return MockStorage()
         
     supabase = MockClient()
+    _supabase_client = supabase
 
 # Monkeypatch postgrest sync request builders to handle [Errno 16] Device or resource busy
 # and other transient connection/socket errors in serverless Vercel environments.
@@ -123,12 +169,29 @@ try:
                                     except OSError:
                                         pass  # If DNS warmup itself fails, the retry will catch it
                                     
-                                    print("Recreating Supabase client to discard stale socket connections...")
+                                    # Close old httpx transport to release file descriptors
                                     try:
-                                        supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+                                        if hasattr(self, 'session') and hasattr(self.session, 'close'):
+                                            self.session.close()
+                                    except Exception:
+                                        pass
+                                    try:
+                                        if hasattr(supabase, 'postgrest') and hasattr(supabase.postgrest, 'session'):
+                                            supabase.postgrest.session.close()
+                                    except Exception:
+                                        pass
+                                    
+                                    # Force-expire the client so get_supabase() builds a fresh one
+                                    global _supabase_client_created_at
+                                    _supabase_client_created_at = 0
+                                    
+                                    print(f"Recreating Supabase client (attempt {attempt + 1})...")
+                                    try:
+                                        fresh = get_supabase()
+                                        supabase = fresh
                                         # Update the session reference on the current builder instance
-                                        if hasattr(supabase, "postgrest") and hasattr(supabase.postgrest, "session"):
-                                            self.session = supabase.postgrest.session
+                                        if hasattr(fresh, "postgrest") and hasattr(fresh.postgrest, "session"):
+                                            self.session = fresh.postgrest.session
                                             print("Updated builder session reference to new client session.")
                                     except Exception as init_err:
                                         print(f"Failed to recreate Supabase client: {str(init_err)}")
@@ -387,7 +450,7 @@ async def upload_document(
     # 5. Upload file to Supabase private storage
     storage_path = f"{user['sub']}/{doc_id}.pdf"
     try:
-        supabase.storage.from_("ec-documents").upload(
+        get_supabase().storage.from_("ec-documents").upload(
             path=storage_path,
             file=contents,
             file_options={"content-type": "application/pdf"}
@@ -409,7 +472,10 @@ async def upload_document(
         }).execute()
     except Exception as e:
         # Cleanup storage on failure
-        supabase.storage.from_("ec-documents").remove([storage_path])
+        try:
+            get_supabase().storage.from_("ec-documents").remove([storage_path])
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail=f"Failed to record document metadata: {str(e)}")
         
     # Log upload event
@@ -417,7 +483,7 @@ async def upload_document(
     
     # Generate 15-minute signed URL for Modal to fetch the file securely
     try:
-        signed_url_resp = supabase.storage.from_("ec-documents").create_signed_url(storage_path, 900)
+        signed_url_resp = get_supabase().storage.from_("ec-documents").create_signed_url(storage_path, 900)
         pdf_signed_url = signed_url_resp["signedURL"]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate secure processing link: {str(e)}")
@@ -432,7 +498,7 @@ async def upload_document(
         print(f"[WORKER TRIGGER FAILURE] Failing analysis request: {str(e)}")
         # Cleanup uploaded file from storage
         try:
-            supabase.storage.from_("ec-documents").remove([storage_path])
+            get_supabase().storage.from_("ec-documents").remove([storage_path])
         except Exception:
             pass
         # Update document status to error

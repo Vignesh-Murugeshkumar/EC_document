@@ -132,3 +132,4 @@ $$ language 'plpgsql';
 
 CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 CREATE TRIGGER update_ec_documents_updated_at BEFORE UPDATE ON public.ec_documents FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+

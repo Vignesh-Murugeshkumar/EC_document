@@ -85,3 +85,4 @@ BEGIN
         VALUES (admin_uid, '+919000000003', 'Admin User', 'admin', 'free', TRUE);
     END IF;
 END $$;
+

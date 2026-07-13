@@ -1,0 +1,212 @@
+TimeUTC,timestampInMs,requestPath,requestMethod,requestQueryString,responseStatusCode,requestId,requestUserAgent,level,environment,branch,vercelCache,type,function,host,deploymentDomain,deploymentId,durationMs,region,maxMemoryUsed,memorySize,message,projectId,traceId,sessionId,invocationId,instanceId,concurrency,workflowRunId,workflowStepId
+2026-06-29 14:54:47,1782744887561,ec-document.vercel.app/api/documents/upload,POST,,500,7kd5x-1782744886516-9b19482e744d,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",info,production,main,MISS,function,/api/[[...path]].py,ec-document.vercel.app,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,,,,,"could not import ""api/[[...path]].py"":
+Traceback (most recent call last):
+File ""/var/task/_vendor/vercel_runtime/vc_init.py"", line 486, in <module>
+__vc_module = import_module(_entrypoint_modname, _entrypoint_abs)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File ""/var/task/_vendor/vercel_runtime/resolver.py"", line 24, in import_module
+spec.loader.exec_module(mod)
+File ""<frozen importlib._bootstrap_external>"", line 999, in exec_module
+File ""<frozen importlib._bootstrap>"", line 488, in _call_with_frames_removed
+File ""/var/task/api/[[...path]].py"", line 22, in <module>
+from main import app  # Import the FastAPI app instance from backend/main.py
+^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'main'
+could not import ""api/[[...path]].py"":
+Traceback (most recent call last):
+File ""/var/task/_vendor/vercel_runtime/vc_init.py"", line 486, in <module>
+__vc_module = import_module(_entrypoint_modname, _entrypoint_abs)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File ""/var/task/_vendor/vercel_runtime/resolver.py"", line 24, in import_module
+spec.loader.exec_module(mod)
+File ""<frozen importlib._bootstrap_external>"", line 999, in exec_module
+File ""<frozen importlib._bootstrap>"", line 488, in _call_with_frames_removed
+File ""/var/task/api/[[...path]].py"", line 22, in <module>
+from main import app  # Import the FastAPI app instance from backend/main.py
+^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'main'
+Python process exited with exit status: 1. The logs above can help with debugging the issue.",prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:46,1782744886516,ec-document.vercel.app/api/documents/upload,POST,,500,7kd5x-1782744886516-9b19482e744d,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",,production,main,MISS,function,/api/[[...path]].py,ec-document.vercel.app,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,238,iad1,-1,2048,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,01KW9Y0C05FDF5J2DX81QNCBY4,,-1,,
+2026-06-29 14:54:38,1782744878209,ec-document.vercel.app/api/documents,GET,,500,2gdlj-1782744877836-971f7fb65922,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",info,production,main,BYPASS,function,/api/[[...path]].py,ec-document.vercel.app,ec-document.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,,,,,"could not import ""api/[[...path]].py"":
+Traceback (most recent call last):
+File ""/var/task/_vendor/vercel_runtime/vc_init.py"", line 486, in <module>
+__vc_module = import_module(_entrypoint_modname, _entrypoint_abs)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File ""/var/task/_vendor/vercel_runtime/resolver.py"", line 24, in import_module
+spec.loader.exec_module(mod)
+File ""<frozen importlib._bootstrap_external>"", line 999, in exec_module
+File ""<frozen importlib._bootstrap>"", line 488, in _call_with_frames_removed
+File ""/var/task/api/[[...path]].py"", line 22, in <module>
+from main import app  # Import the FastAPI app instance from backend/main.py
+^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'main'
+could not import ""api/[[...path]].py"":
+Traceback (most recent call last):
+File ""/var/task/_vendor/vercel_runtime/vc_init.py"", line 486, in <module>
+__vc_module = import_module(_entrypoint_modname, _entrypoint_abs)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File ""/var/task/_vendor/vercel_runtime/resolver.py"", line 24, in import_module
+spec.loader.exec_module(mod)
+File ""<frozen importlib._bootstrap_external>"", line 999, in exec_module
+File ""<frozen importlib._bootstrap>"", line 488, in _call_with_frames_removed
+File ""/var/task/api/[[...path]].py"", line 22, in <module>
+from main import app  # Import the FastAPI app instance from backend/main.py
+^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'main'
+Python process exited with exit status: 1. The logs above can help with debugging the issue.",prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:37,1782744877836,ec-document.vercel.app/api/documents,GET,,500,2gdlj-1782744877836-971f7fb65922,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",,production,main,BYPASS,function,/api/[[...path]].py,ec-document.vercel.app,ec-document.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,235,iad1,-1,2048,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,01KW9Y02VZE91GWJFS38DGYH02,,-1,,
+2026-06-29 14:54:37,1782744877836,ec-document.vercel.app/api/documents,GET,,500,2gdlj-1782744877836-971f7fb65922,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",,production,main,BYPASS,static,/api/[[...path]].py,ec-document.vercel.app,ec-document.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,483,bom1,,,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:37,1782744877644,ec-document.vercel.app/dashboard,GET,,304,2gdlj-1782744877644-e699847dbd69,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",,production,main,HIT,static,/frontend/dashboard,ec-document.vercel.app,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,60,bom1,,,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:37,1782744877593,ec-document.vercel.app/dashboard,GET,_rsc=8kzk2,304,mmcsz-1782744877593-7298712f2ba5,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",,production,main,HIT,static,/frontend/dashboard,ec-document.vercel.app,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,5,bom1,,,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:37,1782744877466,ec-document.vercel.app/api/auth/test-login,POST,,500,cd4kt-1782744877106-9257f3cae43f,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",info,production,main,MISS,function,/api/[[...path]].py,ec-document.vercel.app,ec-document.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,,,,,"could not import ""api/[[...path]].py"":
+Traceback (most recent call last):
+File ""/var/task/_vendor/vercel_runtime/vc_init.py"", line 486, in <module>
+__vc_module = import_module(_entrypoint_modname, _entrypoint_abs)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File ""/var/task/_vendor/vercel_runtime/resolver.py"", line 24, in import_module
+spec.loader.exec_module(mod)
+File ""<frozen importlib._bootstrap_external>"", line 999, in exec_module
+File ""<frozen importlib._bootstrap>"", line 488, in _call_with_frames_removed
+File ""/var/task/api/[[...path]].py"", line 22, in <module>
+from main import app  # Import the FastAPI app instance from backend/main.py
+^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'main'
+could not import ""api/[[...path]].py"":
+Traceback (most recent call last):
+File ""/var/task/_vendor/vercel_runtime/vc_init.py"", line 486, in <module>
+__vc_module = import_module(_entrypoint_modname, _entrypoint_abs)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File ""/var/task/_vendor/vercel_runtime/resolver.py"", line 24, in import_module
+spec.loader.exec_module(mod)
+File ""<frozen importlib._bootstrap_external>"", line 999, in exec_module
+File ""<frozen importlib._bootstrap>"", line 488, in _call_with_frames_removed
+File ""/var/task/api/[[...path]].py"", line 22, in <module>
+from main import app  # Import the FastAPI app instance from backend/main.py
+^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'main'
+Python process exited with exit status: 1. The logs above can help with debugging the issue.",prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:37,1782744877106,ec-document.vercel.app/api/auth/test-login,POST,,500,cd4kt-1782744877106-9257f3cae43f,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",,production,main,MISS,function,/api/[[...path]].py,ec-document.vercel.app,ec-document.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,230,iad1,-1,2048,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,01KW9Y024TX5DAPCTRCFC4ENFV,,-1,,
+2026-06-29 14:54:34,1782744874443,ec-document.vercel.app/,GET,,200,7mjbf-1782744874443-9a82ad12c3af,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",,production,main,HIT,static,/frontend/,ec-document.vercel.app,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,13,bom1,,,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:34,1782744874395,ec-document.vercel.app/,GET,_rsc=189n2,200,whmdf-1782744874395-4bfd95a85ad5,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",,production,main,HIT,static,/frontend/,ec-document.vercel.app,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,7,bom1,,,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:27,1782744867901,ec-document.vercel.app/api/documents,GET,,500,bl7x5-1782744867556-d84de036e1e4,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",info,production,main,BYPASS,function,/api/[[...path]].py,ec-document.vercel.app,ec-document.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,,,,,"could not import ""api/[[...path]].py"":
+Traceback (most recent call last):
+File ""/var/task/_vendor/vercel_runtime/vc_init.py"", line 486, in <module>
+__vc_module = import_module(_entrypoint_modname, _entrypoint_abs)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File ""/var/task/_vendor/vercel_runtime/resolver.py"", line 24, in import_module
+spec.loader.exec_module(mod)
+File ""<frozen importlib._bootstrap_external>"", line 999, in exec_module
+File ""<frozen importlib._bootstrap>"", line 488, in _call_with_frames_removed
+File ""/var/task/api/[[...path]].py"", line 22, in <module>
+from main import app  # Import the FastAPI app instance from backend/main.py
+^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'main'
+could not import ""api/[[...path]].py"":
+Traceback (most recent call last):
+File ""/var/task/_vendor/vercel_runtime/vc_init.py"", line 486, in <module>
+__vc_module = import_module(_entrypoint_modname, _entrypoint_abs)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File ""/var/task/_vendor/vercel_runtime/resolver.py"", line 24, in import_module
+spec.loader.exec_module(mod)
+File ""<frozen importlib._bootstrap_external>"", line 999, in exec_module
+File ""<frozen importlib._bootstrap>"", line 488, in _call_with_frames_removed
+File ""/var/task/api/[[...path]].py"", line 22, in <module>
+from main import app  # Import the FastAPI app instance from backend/main.py
+^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'main'
+Python process exited with exit status: 1. The logs above can help with debugging the issue.",prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:27,1782744867556,ec-document.vercel.app/api/documents,GET,,500,bl7x5-1782744867556-d84de036e1e4,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",,production,main,BYPASS,function,/api/[[...path]].py,ec-document.vercel.app,ec-document.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,228,iad1,-1,2048,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,01KW9XZRT6GRCHMBQW5J5N4R55,,-1,,
+2026-06-29 14:54:27,1782744867556,ec-document.vercel.app/api/documents,GET,,500,bl7x5-1782744867556-d84de036e1e4,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",,production,main,BYPASS,static,/api/[[...path]].py,ec-document.vercel.app,ec-document.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,439,bom1,,,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:27,1782744867299,ec-document.vercel.app/dashboard,GET,,304,bl7x5-1782744867299-c40bb53f4767,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",,production,main,HIT,static,/frontend/dashboard,ec-document.vercel.app,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,49,bom1,,,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:26,1782744866959,ec-document.vercel.app/api/documents,GET,,500,w2rcp-1782744866608-1aa233a77a28,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",info,production,main,BYPASS,function,/api/[[...path]].py,ec-document.vercel.app,ec-document.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,,,,,"could not import ""api/[[...path]].py"":
+Traceback (most recent call last):
+File ""/var/task/_vendor/vercel_runtime/vc_init.py"", line 486, in <module>
+__vc_module = import_module(_entrypoint_modname, _entrypoint_abs)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File ""/var/task/_vendor/vercel_runtime/resolver.py"", line 24, in import_module
+spec.loader.exec_module(mod)
+File ""<frozen importlib._bootstrap_external>"", line 999, in exec_module
+File ""<frozen importlib._bootstrap>"", line 488, in _call_with_frames_removed
+File ""/var/task/api/[[...path]].py"", line 22, in <module>
+from main import app  # Import the FastAPI app instance from backend/main.py
+^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'main'
+could not import ""api/[[...path]].py"":
+Traceback (most recent call last):
+File ""/var/task/_vendor/vercel_runtime/vc_init.py"", line 486, in <module>
+__vc_module = import_module(_entrypoint_modname, _entrypoint_abs)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File ""/var/task/_vendor/vercel_runtime/resolver.py"", line 24, in import_module
+spec.loader.exec_module(mod)
+File ""<frozen importlib._bootstrap_external>"", line 999, in exec_module
+File ""<frozen importlib._bootstrap>"", line 488, in _call_with_frames_removed
+File ""/var/task/api/[[...path]].py"", line 22, in <module>
+from main import app  # Import the FastAPI app instance from backend/main.py
+^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'main'
+Python process exited with exit status: 1. The logs above can help with debugging the issue.",prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:26,1782744866608,ec-document.vercel.app/api/documents,GET,,500,w2rcp-1782744866608-1aa233a77a28,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",,production,main,BYPASS,function,/api/[[...path]].py,ec-document.vercel.app,ec-document.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,236,iad1,-1,2048,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,01KW9XZQWME5H8CSDHMWYXCXXT,,-1,,
+2026-06-29 14:54:26,1782744866608,ec-document.vercel.app/api/documents,GET,,500,w2rcp-1782744866608-1aa233a77a28,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",,production,main,BYPASS,static,/api/[[...path]].py,ec-document.vercel.app,ec-document.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,462,bom1,,,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:25,1782744865787,ec-document.vercel.app/dashboard,GET,,200,ddgxh-1782744865787-aa65d2e1f80b,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",,production,main,HIT,static,/frontend/dashboard,ec-document.vercel.app,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,3,bom1,,,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:26,1782744866004,ec-document.vercel.app/api/auth/test-login,POST,,500,9sxm4-1782744865656-1cf3be377de1,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",info,production,main,MISS,function,/api/[[...path]].py,ec-document.vercel.app,ec-document.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,,,,,"could not import ""api/[[...path]].py"":
+Traceback (most recent call last):
+File ""/var/task/_vendor/vercel_runtime/vc_init.py"", line 486, in <module>
+__vc_module = import_module(_entrypoint_modname, _entrypoint_abs)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File ""/var/task/_vendor/vercel_runtime/resolver.py"", line 24, in import_module
+spec.loader.exec_module(mod)
+File ""<frozen importlib._bootstrap_external>"", line 999, in exec_module
+File ""<frozen importlib._bootstrap>"", line 488, in _call_with_frames_removed
+File ""/var/task/api/[[...path]].py"", line 22, in <module>
+from main import app  # Import the FastAPI app instance from backend/main.py
+^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'main'
+could not import ""api/[[...path]].py"":
+Traceback (most recent call last):
+File ""/var/task/_vendor/vercel_runtime/vc_init.py"", line 486, in <module>
+__vc_module = import_module(_entrypoint_modname, _entrypoint_abs)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File ""/var/task/_vendor/vercel_runtime/resolver.py"", line 24, in import_module
+spec.loader.exec_module(mod)
+File ""<frozen importlib._bootstrap_external>"", line 999, in exec_module
+File ""<frozen importlib._bootstrap>"", line 488, in _call_with_frames_removed
+File ""/var/task/api/[[...path]].py"", line 22, in <module>
+from main import app  # Import the FastAPI app instance from backend/main.py
+^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'main'
+Python process exited with exit status: 1. The logs above can help with debugging the issue.",prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:25,1782744865656,ec-document.vercel.app/api/auth/test-login,POST,,500,9sxm4-1782744865656-1cf3be377de1,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",,production,main,MISS,function,/api/[[...path]].py,ec-document.vercel.app,ec-document.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,229,iad1,-1,2048,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,01KW9XZPYXXX9RK4QKZBBQD3A6,,-1,,
+2026-06-29 14:54:25,1782744865072,ec-document.vercel.app/dashboard,GET,_rsc=8kzk2,200,ddgxh-1782744865072-c28da0692ef2,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",,production,main,PRERENDER,static,/frontend/dashboard,ec-document.vercel.app,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,665,bom1,,,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:24,1782744864928,ec-document.vercel.app/api/auth/test-login,POST,,500,9sxm4-1782744864209-6c0f744be70e,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",info,production,main,MISS,function,/api/[[...path]].py,ec-document.vercel.app,ec-document.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,,,,,"could not import ""api/[[...path]].py"":
+Traceback (most recent call last):
+File ""/var/task/_vendor/vercel_runtime/vc_init.py"", line 486, in <module>
+__vc_module = import_module(_entrypoint_modname, _entrypoint_abs)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File ""/var/task/_vendor/vercel_runtime/resolver.py"", line 24, in import_module
+spec.loader.exec_module(mod)
+File ""<frozen importlib._bootstrap_external>"", line 999, in exec_module
+File ""<frozen importlib._bootstrap>"", line 488, in _call_with_frames_removed
+File ""/var/task/api/[[...path]].py"", line 22, in <module>
+from main import app  # Import the FastAPI app instance from backend/main.py
+^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'main'
+could not import ""api/[[...path]].py"":
+Traceback (most recent call last):
+File ""/var/task/_vendor/vercel_runtime/vc_init.py"", line 486, in <module>
+__vc_module = import_module(_entrypoint_modname, _entrypoint_abs)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File ""/var/task/_vendor/vercel_runtime/resolver.py"", line 24, in import_module
+spec.loader.exec_module(mod)
+File ""<frozen importlib._bootstrap_external>"", line 999, in exec_module
+File ""<frozen importlib._bootstrap>"", line 488, in _call_with_frames_removed
+File ""/var/task/api/[[...path]].py"", line 22, in <module>
+from main import app  # Import the FastAPI app instance from backend/main.py
+^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'main'
+Python process exited with exit status: 1. The logs above can help with debugging the issue.",prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:24,1782744864209,ec-document.vercel.app/api/auth/test-login,POST,,500,9sxm4-1782744864209-6c0f744be70e,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",,production,main,MISS,function,/api/[[...path]].py,ec-document.vercel.app,ec-document.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,239,iad1,-1,2048,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,01KW9XZNWTA3EK12CS0WZ5RXV4,,-1,,
+2026-06-29 14:54:20,1782744860272,ec-document.vercel.app/,GET,,200,zm8g5-1782744860272-f101c5f93203,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",,production,main,PRERENDER,static,/frontend/,ec-document.vercel.app,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,728,bom1,,,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:16,1782744856597,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app/,GET,,200,x8n62-1782744856597-79c39df9b1a8,"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.7390.0 Safari/537.36",,production,main,HIT,static,/frontend/,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,11,sfo1,,,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:16,1782744856288,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app/,GET,,200,t5psh-1782744856288-79bb3b5977c3,"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.7390.0 Safari/537.36",,production,main,HIT,static,/frontend/,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,132,sfo1,,,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:04,1782744844062,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app/,GET,,200,88rs2-1782744844062-26a2287f873e,vercel-favicon/1.0,,production,main,PRERENDER,static,/frontend/,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,366,sfo1,,,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
+2026-06-29 14:54:03,1782744843955,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app/,GET,,200,w2dc7-1782744843955-7257c3981441,vercel-favicon/1.0,,production,main,PRERENDER,static,/frontend/,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app,ec-document-gne7v563t-vignesh-murugeshkumars-projects.vercel.app,dpl_Ez5kZZUag9EQkzMHGEQH7ovZY7YX,536,sfo1,,,,prj_tMpvLmCK1viUuwG6PqdDWl9UUlZ7,,,,,,,
