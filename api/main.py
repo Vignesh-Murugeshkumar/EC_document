@@ -501,15 +501,17 @@ async def register_profile(req: RegisterProfileRequest, request: Request, author
     except Exception as e:
         print(f"[Supabase Select Profile Warning] {e}")
         
-    # Check if the phone number is already registered by a different user
+    # Check if the phone number is already registered by a different user ID (e.g. orphaned profile)
     try:
-        dup_phone = supabase.table("profiles").select("id").eq("phone", phone).execute()
-        if dup_phone.data and dup_phone.data[0]["id"] != user_id:
-            raise HTTPException(status_code=400, detail="A user with this phone number is already registered.")
-    except HTTPException as he:
-        raise he
+        dup_phone = supabase.table("profiles").select("*").eq("phone", phone).execute()
+        if dup_phone.data:
+            old_profile = dup_phone.data[0]
+            old_id = old_profile.get("id")
+            if old_id != user_id:
+                print(f"[Supabase Profile Sync] Orphaned profile detected with phone {phone} (ID: {old_id}). Deleting old profile to allow re-registration under new ID: {user_id}")
+                supabase.table("profiles").delete().eq("id", old_id).execute()
     except Exception as e:
-        print(f"[Supabase Phone Check Warning] {e}")
+        print(f"[Supabase Phone Clean/Check Warning] {e}")
 
     # Create profile in public.profiles since it doesn't exist
     try:
