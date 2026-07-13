@@ -469,17 +469,49 @@ async def register_profile(req: RegisterProfileRequest, request: Request, author
         print(f"[Supabase Auth Debug] Token verification failed: {e}")
         raise HTTPException(status_code=401, detail=f"Token verification failed: {str(e)}")
         
-    # Check if a profile with the same ID or phone already exists
+    # Check if a profile with this ID already exists (idempotent login/registration)
     try:
-        dup_profile = supabase.table("profiles").select("id").or_(f"id.eq.{user_id},phone.eq.{phone}").execute()
-        if dup_profile.data:
-            raise HTTPException(status_code=400, detail="A user with this phone number or account is already registered.")
-    except HTTPException as he:
-        raise he
+        existing = supabase.table("profiles").select("*").eq("id", user_id).execute()
+        if existing.data:
+            profile = existing.data[0]
+            role = profile.get("role", "user")
+            sub_status = profile.get("subscription_status", "free")
+            
+            # Log audit event
+            log_audit_event(user_id, "subscription_created" if sub_status == "premium" else "upload", ip_address=request.client.host, metadata={"method": "supabase_native_register_existing", "plan": sub_status})
+            
+            payload_jwt = {
+                "sub": user_id,
+                "phone": profile.get("phone", phone),
+                "role": role,
+                "subscription_status": sub_status,
+                "exp": int(time.time()) + 86400 * 7
+            }
+            token = jwt.encode(payload_jwt, JWT_SECRET, algorithm="HS256")
+            
+            return {
+                "token": token,
+                "user": {
+                    "id": user_id,
+                    "phone": profile.get("phone", phone),
+                    "role": role,
+                    "subscription_status": sub_status
+                }
+            }
     except Exception as e:
         print(f"[Supabase Select Profile Warning] {e}")
         
-    # Create profile in public.profiles
+    # Check if the phone number is already registered by a different user
+    try:
+        dup_phone = supabase.table("profiles").select("id").eq("phone", phone).execute()
+        if dup_phone.data and dup_phone.data[0]["id"] != user_id:
+            raise HTTPException(status_code=400, detail="A user with this phone number is already registered.")
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"[Supabase Phone Check Warning] {e}")
+
+    # Create profile in public.profiles since it doesn't exist
     try:
         expires = "now() + interval '1 year'" if plan == "premium" else None
         supabase.table("profiles").insert({
