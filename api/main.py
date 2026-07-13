@@ -515,7 +515,8 @@ async def register_profile(req: RegisterProfileRequest, request: Request, author
 
     # Create profile in public.profiles since it doesn't exist
     try:
-        expires = "now() + interval '1 year'" if plan == "premium" else None
+        from datetime import datetime, timedelta, timezone
+        expires = (datetime.now(timezone.utc) + timedelta(days=365)).isoformat() if plan == "premium" else None
         supabase.table("profiles").insert({
             "id": user_id,
             "phone": phone,
@@ -583,9 +584,11 @@ async def apply_promo(req: PromoRequest, request: Request, authorization: str = 
             
         profile = prof_resp.data[0]
         
+        from datetime import datetime, timedelta, timezone
+        expires_iso = (datetime.now(timezone.utc) + timedelta(days=365 * 10)).isoformat()
         supabase.table("profiles").update({
             "subscription_status": "premium",
-            "subscription_expires_at": "now() + interval '10 years'"
+            "subscription_expires_at": expires_iso
         }).eq("id", user_id).execute()
         
         # Log audit event
