@@ -12,6 +12,9 @@ export default function SubscriptionHub() {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoError, setPromoError] = useState("");
+  const [promoApplied, setPromoApplied] = useState(false);
 
   const backendUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -121,6 +124,46 @@ export default function SubscriptionHub() {
     
     alert("Payment Successful! Your account has been upgraded to Premium Tier.");
     router.push("/dashboard");
+  };
+
+  const handlePromoApply = async () => {
+    if (!promoCode) return;
+    setLoading(true);
+    setPromoError("");
+    
+    try {
+      const response = await fetch(`${backendUrl}/api/subscription/apply-promo`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ promo_code: promoCode.trim().toUpperCase() })
+      });
+      
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || "Invalid promo code.");
+      }
+      
+      setPromoApplied(true);
+      
+      // Update local storage credentials with upgraded token and user object
+      localStorage.setItem("ec_token", data.token);
+      localStorage.setItem("ec_user", JSON.stringify(data.user));
+      document.cookie = `ec_token=${data.token}; path=/; max-age=604800; SameSite=Lax`;
+      
+      setUser(data.user);
+      setToken(data.token);
+      
+      alert("Promo Code Applied! Your account has been upgraded to Premium Tier.");
+      router.push("/dashboard");
+    } catch (err) {
+      console.error("Error applying promo code:", err);
+      setPromoError(err.message || "Failed to apply promo code.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -263,6 +306,34 @@ export default function SubscriptionHub() {
             >
               {user?.subscription_status === "premium" ? "Active Plan" : (loading ? "Processing..." : "Upgrade to Premium")}
             </button>
+
+            {user?.subscription_status !== "premium" && (
+              <div className="mt-6 border-t border-orange-100/50 pt-5">
+                <label className="block text-[10px] font-bold text-orange-950/60 uppercase tracking-wider mb-2">Have a Promo Code?</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Enter code"
+                    value={promoCode}
+                    onChange={(e) => {
+                      setPromoCode(e.target.value);
+                      setPromoError("");
+                    }}
+                    disabled={promoApplied || loading}
+                    className="flex-grow bg-white/60 border border-orange-200/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-orange-400 placeholder:text-orange-950/30 text-orange-950 uppercase"
+                  />
+                  <button
+                    onClick={handlePromoApply}
+                    disabled={!promoCode || promoApplied || loading}
+                    className="px-4 py-2 bg-orange-950 text-white rounded-xl text-xs font-bold transition-all hover:bg-orange-900 active:scale-95 disabled:opacity-50 disabled:cursor-default"
+                  >
+                    Apply
+                  </button>
+                </div>
+                {promoError && <p className="text-[10px] text-red-600 font-medium mt-1.5">{promoError}</p>}
+                {promoApplied && <p className="text-[10px] text-emerald-700 font-bold mt-1.5">✓ Upgrading tier...</p>}
+              </div>
+            )}
           </div>
 
         </div>

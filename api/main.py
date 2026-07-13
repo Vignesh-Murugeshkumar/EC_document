@@ -366,50 +366,6 @@ async def test_login(req: TestLoginRequest, request: Request):
     email = req.email.strip().lower()
     password = req.password.strip()
     
-    # 1. Developer Admin / Test User Bypasses
-    bypass_users = {
-        "vigneshmurugeshkumar@gmail.com": {"password": "Vicky@2077", "id": "00000000-0000-0000-0000-000000000003", "phone": "+919840000000", "role": "admin", "subscription_status": "premium"},
-        "mail.murugeshkumar@gmail.com": {"password": "Vicky@2007", "id": "00000000-0000-0000-0000-000000000004", "phone": "+919940194051", "role": "admin", "subscription_status": "premium"},
-        "scattofot@gmail.com": {"password": "scattofot@2007", "id": "00000000-0000-0000-0000-000000000005", "phone": "+919940194052", "role": "user", "subscription_status": "premium"}
-    }
-    
-    if email in bypass_users and password == bypass_users[email]["password"]:
-        user_info = bypass_users[email]
-        user_id = user_info["id"]
-        phone = user_info["phone"]
-        role = user_info["role"]
-        sub_status = user_info["subscription_status"]
-        
-        # Try to sync profile in Supabase (upsert) so database triggers and RLS work fine
-        try:
-            supabase.table("profiles").upsert({
-                "id": user_id,
-                "phone": phone,
-                "name": email.split("@")[0],
-                "role": role,
-                "subscription_status": sub_status
-            }).execute()
-        except Exception as e:
-            print(f"[Bypass Profile Sync Warning] {e}")
-            
-        payload_jwt = {
-            "sub": user_id,
-            "phone": phone,
-            "role": role,
-            "subscription_status": sub_status,
-            "exp": int(time.time()) + 86400 * 7
-        }
-        token = jwt.encode(payload_jwt, JWT_SECRET, algorithm="HS256")
-        return {
-            "token": token,
-            "user": {
-                "id": user_id,
-                "phone": phone,
-                "role": role,
-                "subscription_status": sub_status
-            }
-        }
-
     # Standard email/password login using Supabase Auth REST endpoint
     import requests
     url = f"{SUPABASE_URL}/auth/v1/token?grant_type=password"
@@ -594,6 +550,71 @@ async def register_profile(req: RegisterProfileRequest, request: Request, author
         }
     }
 
+
+class PromoRequest(BaseModel):
+    promo_code: str
+
+@app.post("/api/subscription/apply-promo")
+async def apply_promo(req: PromoRequest, request: Request, authorization: str = Header(None)):
+    promo_input = req.promo_code.strip().upper()
+    expected_promo = os.environ.get("PROMO_CODE", "VICKY100").strip().upper()
+    
+    if not promo_input or promo_input != expected_promo:
+        raise HTTPException(status_code=400, detail="Invalid promo code.")
+        
+    # Get user from Bearer token
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header.")
+    token = authorization.split(" ")[1]
+    
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token: missing subject.")
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid session token: {str(e)}")
+        
+    # Upgrade user profile to premium in Supabase
+    try:
+        prof_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
+        if not prof_resp.data:
+            raise HTTPException(status_code=404, detail="User profile not found.")
+            
+        profile = prof_resp.data[0]
+        
+        supabase.table("profiles").update({
+            "subscription_status": "premium",
+            "subscription_expires_at": "now() + interval '10 years'"
+        }).eq("id", user_id).execute()
+        
+        # Log audit event
+        log_audit_event(user_id, "subscription_created", ip_address=request.client.host, metadata={"method": "promo_code", "promo": promo_input})
+        
+        # Sign upgraded JWT token with premium status
+        payload_jwt = {
+            "sub": user_id,
+            "phone": profile.get("phone", ""),
+            "role": profile.get("role", "user"),
+            "subscription_status": "premium",
+            "exp": int(time.time()) + 86400 * 7
+        }
+        new_token = jwt.encode(payload_jwt, JWT_SECRET, algorithm="HS256")
+        
+        return {
+            "status": "success",
+            "token": new_token,
+            "user": {
+                "id": user_id,
+                "phone": profile.get("phone", ""),
+                "role": profile.get("role", "user"),
+                "subscription_status": "premium"
+            }
+        }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upgrade user profile: {str(e)}")
 
 
 # --- Health Check ---
