@@ -460,25 +460,13 @@ async def register_profile(req: RegisterProfileRequest, request: Request, author
     sb_token = authorization.split(" ")[1]
     
     try:
-        # Inspect token header to detect the algorithm dynamically (e.g. HS256 vs RS256)
-        try:
-            header = jwt.get_unverified_header(sb_token)
-            alg = header.get("alg", "HS256")
-            print(f"[JWT Debug] Header: {header} | Detected Alg: {alg}")
-        except Exception as eh:
-            print(f"[JWT Debug] Failed to extract header: {eh}")
-            alg = "HS256"
-            
-        # Decodes token using the shared SUPABASE_JWT_SECRET
-        payload = jwt.decode(sb_token, JWT_SECRET, algorithms=[alg], options={"verify_aud": False})
-        user_id = payload.get("sub")
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token: missing subject.")
-    except jwt.PyJWTError as e:
-        print(f"[JWT Debug] PyJWT decode failed: {str(e)}")
-        raise HTTPException(status_code=401, detail=f"Token verification failed: {str(e)}")
+        # Call Supabase Auth server directly using the SDK to verify the token and retrieve the user
+        user_resp = supabase.auth.get_user(sb_token)
+        if not user_resp or not user_resp.user:
+            raise HTTPException(status_code=401, detail="Invalid token: user not found.")
+        user_id = user_resp.user.id
     except Exception as e:
-        print(f"[JWT Debug] General decode failed: {str(e)}")
+        print(f"[Supabase Auth Debug] Token verification failed: {e}")
         raise HTTPException(status_code=401, detail=f"Token verification failed: {str(e)}")
         
     # Check if a profile with the same ID or phone already exists
