@@ -460,12 +460,25 @@ async def register_profile(req: RegisterProfileRequest, request: Request, author
     sb_token = authorization.split(" ")[1]
     
     try:
+        # Inspect token header to detect the algorithm dynamically (e.g. HS256 vs RS256)
+        try:
+            header = jwt.get_unverified_header(sb_token)
+            alg = header.get("alg", "HS256")
+            print(f"[JWT Debug] Header: {header} | Detected Alg: {alg}")
+        except Exception as eh:
+            print(f"[JWT Debug] Failed to extract header: {eh}")
+            alg = "HS256"
+            
         # Decodes token using the shared SUPABASE_JWT_SECRET
-        payload = jwt.decode(sb_token, JWT_SECRET, algorithms=["HS256"], options={"verify_aud": False})
+        payload = jwt.decode(sb_token, JWT_SECRET, algorithms=[alg], options={"verify_aud": False})
         user_id = payload.get("sub")
         if not user_id:
             raise HTTPException(status_code=401, detail="Invalid token: missing subject.")
     except jwt.PyJWTError as e:
+        print(f"[JWT Debug] PyJWT decode failed: {str(e)}")
+        raise HTTPException(status_code=401, detail=f"Token verification failed: {str(e)}")
+    except Exception as e:
+        print(f"[JWT Debug] General decode failed: {str(e)}")
         raise HTTPException(status_code=401, detail=f"Token verification failed: {str(e)}")
         
     # Check if a profile with the same ID or phone already exists
