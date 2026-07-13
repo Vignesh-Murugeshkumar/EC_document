@@ -336,43 +336,105 @@ async def test_login(req: TestLoginRequest, request: Request):
     email = req.email.strip().lower()
     password = req.password.strip()
     
-    if email != "vigneshmurugeshkumar@gmail.com" or password != "Vicky@2077":
-        raise HTTPException(
-            status_code=401, 
-            detail="Invalid email or password."
-        )
+    # 1. Developer Admin Bypass
+    if email == "vigneshmurugeshkumar@gmail.com" and password == "Vicky@2077":
+        user_id = "00000000-0000-0000-0000-000000000003"  # System Admin UUID
+        phone = "+919840000000"
+        role = "admin"
+        sub_status = "premium"
         
-    # Pre-authorized bypass config: grant Admin role and Premium subscription to bypass all entry restrictions
-    user_id = "00000000-0000-0000-0000-000000000003"  # System Admin UUID
-    phone = "+919840000000"
-    role = "admin"
-    sub_status = "premium"
-    
-    # Attempt to fetch profile from Supabase and elevate roles if the profile exists
-    try:
-        prof_resp = supabase.table("profiles").select("*").eq("phone", phone).execute()
-        if prof_resp.data:
-            profile = prof_resp.data[0]
-            user_id = profile.get("id", user_id)
-            phone = profile.get("phone", phone)
+        try:
+            prof_resp = supabase.table("profiles").select("*").eq("phone", phone).execute()
+            if prof_resp.data:
+                profile = prof_resp.data[0]
+                user_id = profile.get("id", user_id)
+                phone = profile.get("phone", phone)
+                
+                # Elevate user to admin/premium to ensure bypass
+                supabase.table("profiles").update({
+                    "role": "admin",
+                    "subscription_status": "premium"
+                }).eq("id", user_id).execute()
+        except Exception:
+            pass
             
-            # Elevate user to admin/premium to ensure bypass
-            supabase.table("profiles").update({
-                "role": "admin",
-                "subscription_status": "premium"
-            }).eq("id", user_id).execute()
-    except Exception:
-        pass
+        payload = {
+            "sub": user_id,
+            "phone": phone,
+            "role": role,
+            "subscription_status": sub_status,
+            "exp": int(time.time()) + 86400 * 7
+        }
+        token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
         
-    # Sign JWT session token
+        return {
+            "token": token,
+            "user": {
+                "id": user_id,
+                "phone": phone,
+                "role": role,
+                "subscription_status": sub_status
+            }
+        }
+
+    # 2. Standard email/password login using Supabase Auth REST endpoint
+    import requests
+    url = f"{SUPABASE_URL}/auth/v1/token?grant_type=password"
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Content-Type": "application/json"
+    }
     payload = {
+        "email": email,
+        "password": password
+    }
+    
+    try:
+        res = requests.post(url, json=payload, headers=headers)
+        if res.status_code not in (200, 201):
+            raise HTTPException(status_code=401, detail="Invalid email or password.")
+            
+        data = res.json()
+        user_id = data["user"]["id"]
+        phone = data["user"].get("phone") or ""
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Authentication server error: {str(e)}")
+        
+    # 3. Retrieve user profile
+    try:
+        prof_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
+        if not prof_resp.data:
+            # Fallback profile creation (e.g. if created externally)
+            supabase.table("profiles").insert({
+                "id": user_id,
+                "phone": phone or "+910000000000",
+                "name": email.split("@")[0],
+                "role": "user",
+                "subscription_status": "free"
+            }).execute()
+            role = "user"
+            sub_status = "free"
+        else:
+            profile = prof_resp.data[0]
+            role = profile.get("role", "user")
+            sub_status = profile.get("subscription_status", "free")
+            phone = profile.get("phone", phone)
+    except Exception as e:
+        print(f"[Supabase Profile Select/Insert Error] {e}")
+        role = "user"
+        sub_status = "free"
+        
+    # 4. Sign custom backend JWT token
+    payload_jwt = {
         "sub": user_id,
         "phone": phone,
         "role": role,
         "subscription_status": sub_status,
         "exp": int(time.time()) + 86400 * 7 # 7 days expiry
     }
-    token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    token = jwt.encode(payload_jwt, JWT_SECRET, algorithm="HS256")
     
     return {
         "token": token,
@@ -385,10 +447,92 @@ async def test_login(req: TestLoginRequest, request: Request):
     }
 
 
+
+class RegisterProfileRequest(BaseModel):
+    name: str
+    phone: str
+    plan: str
+
+@app.post("/api/auth/register-profile")
+async def register_profile(req: RegisterProfileRequest, request: Request, authorization: str = Header(None)):
+    name = req.name.strip()
+    phone = req.phone.strip()
+    plan = req.plan.strip().lower()
+    
+    if not name or not phone or plan not in ("free", "premium"):
+        raise HTTPException(status_code=400, detail="Missing or invalid profile registration parameters.")
+        
+    if not re.match(r"^\+91\d{10}$", phone):
+        raise HTTPException(status_code=400, detail="Invalid Indian mobile number format. Must start with +91 followed by 10 digits.")
+        
+    # Verify Supabase Bearer token passed in the Authorization header
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header.")
+    sb_token = authorization.split(" ")[1]
+    
+    try:
+        # Decodes token using the shared SUPABASE_JWT_SECRET
+        payload = jwt.decode(sb_token, JWT_SECRET, algorithms=["HS256"], options={"verify_aud": False})
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token: missing subject.")
+    except jwt.PyJWTError as e:
+        raise HTTPException(status_code=401, detail=f"Token verification failed: {str(e)}")
+        
+    # Check if a profile with the same ID or phone already exists
+    try:
+        dup_profile = supabase.table("profiles").select("id").or_(f"id.eq.{user_id},phone.eq.{phone}").execute()
+        if dup_profile.data:
+            raise HTTPException(status_code=400, detail="A user with this phone number or account is already registered.")
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"[Supabase Select Profile Warning] {e}")
+        
+    # Create profile in public.profiles
+    try:
+        expires = "now() + interval '1 year'" if plan == "premium" else None
+        supabase.table("profiles").insert({
+            "id": user_id,
+            "phone": phone,
+            "name": name,
+            "role": "user",
+            "subscription_status": plan,
+            "subscription_expires_at": expires
+        }).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create user profile in database: {str(e)}")
+        
+    # Log audit event
+    log_audit_event(user_id, "subscription_created" if plan == "premium" else "upload", ip_address=request.client.host, metadata={"method": "supabase_native_register", "plan": plan})
+    
+    # Sign custom backend JWT session token
+    payload_jwt = {
+        "sub": user_id,
+        "phone": phone,
+        "role": "user",
+        "subscription_status": plan,
+        "exp": int(time.time()) + 86400 * 7 # 7 days expiry
+    }
+    token = jwt.encode(payload_jwt, JWT_SECRET, algorithm="HS256")
+    
+    return {
+        "token": token,
+        "user": {
+            "id": user_id,
+            "phone": phone,
+            "role": "user",
+            "subscription_status": plan
+        }
+    }
+
+
+
 # --- Health Check ---
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
 
 
 # --- Dynamic Supabase Configuration endpoint for frontend Realtime ---

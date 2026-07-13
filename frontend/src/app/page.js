@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "./i18n";
 import { ShieldAlert, UserCheck, ArrowRight, Lock } from "lucide-react";
+import { createClient } from "@supabase/supabase-js";
+
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,7 +21,34 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [successInfo, setSuccessInfo] = useState("");
 
+  // Registration states
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [plan, setPlan] = useState("free");
+  const [otp, setOtp] = useState("");
+  const [authStep, setAuthStep] = useState("form"); // "form" or "otp"
+  const [supabase, setSupabase] = useState(null);
+
   const backendUrl = process.env.NEXT_PUBLIC_API_URL || "";
+
+  // Dynamic initialization of Supabase Client
+  useEffect(() => {
+    const initSupabase = async () => {
+      try {
+        const res = await fetch(`${backendUrl}/api/config`);
+        if (res.ok) {
+          const config = await res.json();
+          const supabaseClient = createClient(config.supabaseUrl, config.supabaseAnonKey);
+          setSupabase(supabaseClient);
+        }
+      } catch (err) {
+        console.error("Failed to initialize Supabase client on auth page:", err);
+      }
+    };
+    if (backendUrl) {
+      initSupabase();
+    }
+  }, [backendUrl]);
 
   // Handle Login
   const handleLogin = async (e) => {
@@ -79,6 +108,122 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  // Handle Register (using Supabase Native Auth signUp)
+  const handleRegister = async (e) => {
+    if (e) e.preventDefault();
+    setError("");
+    setSuccessInfo("");
+    setLoading(true);
+
+    if (!name || !email || !phone || !password) {
+      setError("Please fill out all registration fields.");
+      setLoading(false);
+      return;
+    }
+
+    if (!/^\+91\d{10}$/.test(phone)) {
+      setError("Phone number must start with +91 followed by 10 digits (e.g. +919876543210).");
+      setLoading(false);
+      return;
+    }
+
+    if (!supabase) {
+      setError("Authentication client not initialized yet. Please wait a moment and try again.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // Call Supabase native signUp which triggers confirmation email automatically
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name,
+            phone
+          }
+        }
+      });
+
+      if (signUpError) {
+        throw signUpError;
+      }
+
+      setSuccessInfo("A 6-digit verification code has been sent to your email address. Please check your inbox (and spam folder).");
+      setAuthStep("otp");
+    } catch (err) {
+      setError(err.message || "Failed to submit registration request.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle Verify Registration OTP (using Supabase verifyOtp & backend profile sync)
+  const handleVerifyRegistration = async (e) => {
+    if (e) e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    if (!otp || otp.length !== 6) {
+      setError("Please enter the 6-digit verification code.");
+      setLoading(false);
+      return;
+    }
+
+    if (!supabase) {
+      setError("Authentication client not initialized yet.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // 1. Verify OTP natively with Supabase
+      const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
+        email,
+        token: otp,
+        type: 'signup'
+      });
+
+      if (verifyError) {
+        throw verifyError;
+      }
+
+      const sbAccessToken = verifyData.session?.access_token;
+      if (!sbAccessToken) {
+        throw new Error("Failed to retrieve authentication session.");
+      }
+
+      // 2. Synchronize profile creation in backend public.profiles table
+      const response = await fetch(`${backendUrl}/api/auth/register-profile`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${sbAccessToken}`
+        },
+        body: JSON.stringify({ name, phone, plan }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || "Database profile registration failed.");
+      }
+
+      // 3. Save custom backend JWT token locally & redirect
+      localStorage.setItem("ec_token", data.token);
+      localStorage.setItem("ec_user", JSON.stringify(data.user));
+      document.cookie = `ec_token=${data.token}; path=/; max-age=604800; SameSite=Lax`;
+      
+      router.push("/dashboard");
+    } catch (err) {
+      setError(err.message || "Failed to verify registration code.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
 
   return (
     <main className="min-h-screen flex flex-col md:flex-row overflow-hidden bg-[#f4f6f9]">
@@ -225,7 +370,7 @@ export default function LoginPage() {
             {/* Tabs */}
             <div className="flex border-b border-slate-100 mb-6">
               <button 
-                onClick={() => { setActiveTab("login"); setError(""); }}
+                onClick={() => { setActiveTab("login"); setError(""); setSuccessInfo(""); setAuthStep("form"); }}
                 className={`flex-1 py-3 font-label-bold text-xs uppercase tracking-wider font-bold transition-all border-b-2 ${
                   activeTab === "login" 
                     ? "text-slate-900 border-orange-500" 
@@ -235,12 +380,14 @@ export default function LoginPage() {
                 Login
               </button>
               <button 
-                disabled
-                className="flex-1 py-3 font-label-bold text-xs uppercase tracking-wider font-bold transition-all border-b-2 text-slate-300 border-transparent cursor-not-allowed flex items-center justify-center gap-1.5"
-                title="Public registration is disabled"
+                onClick={() => { setActiveTab("register"); setError(""); setSuccessInfo(""); setAuthStep("form"); }}
+                className={`flex-1 py-3 font-label-bold text-xs uppercase tracking-wider font-bold transition-all border-b-2 ${
+                  activeTab === "register" 
+                    ? "text-slate-900 border-orange-500" 
+                    : "text-slate-400 border-transparent hover:text-slate-700"
+                }`}
               >
                 Register
-                <Lock size={12} className="text-slate-400" />
               </button>
             </div>
 
@@ -260,49 +407,125 @@ export default function LoginPage() {
             )}
 
             {/* Form Fields */}
-            <div className="space-y-5">
-              <div className="text-center">
-                <h3 className="font-headline-lg text-xl font-bold text-slate-900 mb-1.5 font-rajdhani uppercase tracking-wide">
-                  {activeTab === "register" ? "Create Account" : "Secure Login"}
-                </h3>
-                <p className="font-body-md text-xs text-slate-500 leading-normal">
-                  Analyze Indian property documents with institutional precision.
-                </p>
-              </div>
+            {authStep === "otp" ? (
+              <div className="space-y-5">
+                <div className="text-center">
+                  <h3 className="font-headline-lg text-xl font-bold text-slate-900 mb-1.5 font-rajdhani uppercase tracking-wide">
+                    Verify Email
+                  </h3>
+                  <p className="font-body-md text-xs text-slate-500 leading-normal">
+                    We have sent a 6-digit verification code to <strong>{email}</strong>.
+                  </p>
+                </div>
 
-              {/* Email Input */}
-              <div className="space-y-1 text-left">
-                <label className="block font-label-bold text-xs text-slate-600 font-bold">Email address</label>
-                <input 
-                  type="email" 
-                  placeholder="name@example.com" 
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-2.5 outline-none border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all text-sm bg-slate-50 text-slate-900 font-sans"
-                />
-              </div>
+                {/* OTP Input */}
+                <div className="space-y-1 text-left">
+                  <label className="block font-label-bold text-xs text-slate-600 font-bold">Verification Code (OTP)</label>
+                  <input 
+                    type="text" 
+                    maxLength={6}
+                    placeholder="123456" 
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                    className="w-full px-4 py-2.5 outline-none border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all text-sm bg-slate-50 text-slate-900 font-sans tracking-[0.5em] text-center font-bold"
+                  />
+                </div>
 
-              {/* Password Input */}
-              <div className="space-y-1 text-left">
-                <label className="block font-label-bold text-xs text-slate-600 font-bold">Password</label>
-                <input 
-                  type="password" 
-                  placeholder="••••••••" 
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 outline-none border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all text-sm bg-slate-50 text-slate-900 font-sans"
-                />
-              </div>
+                {/* Submit Verification */}
+                <button 
+                  onClick={handleVerifyRegistration}
+                  disabled={loading}
+                  className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-md hover:shadow-lg transition-all py-3 rounded-xl font-headline-md text-sm font-bold active:scale-[0.98] duration-150 font-rajdhani uppercase tracking-wider mt-2"
+                >
+                  {loading ? "Verifying..." : "Verify Code"}
+                </button>
 
-              {/* Submit Button */}
-              <button 
-                onClick={handleLogin}
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-md hover:shadow-lg transition-all py-3 rounded-xl font-headline-md text-sm font-bold active:scale-[0.98] duration-150 font-rajdhani uppercase tracking-wider mt-2"
-              >
-                {loading ? "Logging in..." : "Login"}
-              </button>
-            </div>
+                <div className="text-center mt-4">
+                  <button 
+                    onClick={() => { setAuthStep("form"); setError(""); }}
+                    className="text-xs font-semibold text-orange-500 hover:underline"
+                  >
+                    Back to Registration
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <div className="text-center">
+                  <h3 className="font-headline-lg text-xl font-bold text-slate-900 mb-1.5 font-rajdhani uppercase tracking-wide">
+                    {activeTab === "register" ? "Create Account" : "Secure Login"}
+                  </h3>
+                  <p className="font-body-md text-xs text-slate-500 leading-normal">
+                    Analyze Indian property documents with institutional precision.
+                  </p>
+                </div>
+
+                {activeTab === "register" && (
+                  <>
+                    {/* Name Input */}
+                    <div className="space-y-1 text-left">
+                      <label className="block font-label-bold text-xs text-slate-600 font-bold">Full Name</label>
+                      <input 
+                        type="text" 
+                        placeholder="John Doe" 
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="w-full px-4 py-2.5 outline-none border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all text-sm bg-slate-50 text-slate-900 font-sans"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* Email Input */}
+                <div className="space-y-1 text-left">
+                  <label className="block font-label-bold text-xs text-slate-600 font-bold">Email address</label>
+                  <input 
+                    type="email" 
+                    placeholder="name@example.com" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full px-4 py-2.5 outline-none border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all text-sm bg-slate-50 text-slate-900 font-sans"
+                  />
+                </div>
+
+                {activeTab === "register" && (
+                  <>
+                    {/* Phone Input */}
+                    <div className="space-y-1 text-left">
+                      <label className="block font-label-bold text-xs text-slate-600 font-bold">Phone number</label>
+                      <input 
+                        type="text" 
+                        placeholder="+919876543210" 
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        className="w-full px-4 py-2.5 outline-none border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all text-sm bg-slate-50 text-slate-900 font-sans"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* Password Input */}
+                <div className="space-y-1 text-left">
+                  <label className="block font-label-bold text-xs text-slate-600 font-bold">Password</label>
+                  <input 
+                    type="password" 
+                    placeholder="••••••••" 
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full px-4 py-2.5 outline-none border border-slate-200 rounded-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all text-sm bg-slate-50 text-slate-900 font-sans"
+                  />
+                </div>
+
+                {/* Submit Button */}
+                <button 
+                  onClick={activeTab === "register" ? handleRegister : handleLogin}
+                  disabled={loading}
+                  className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-md hover:shadow-lg transition-all py-3 rounded-xl font-headline-md text-sm font-bold active:scale-[0.98] duration-150 font-rajdhani uppercase tracking-wider mt-2"
+                >
+                  {loading ? "Processing..." : (activeTab === "register" ? "Register" : "Login")}
+                </button>
+              </div>
+            )}
 
           </div>
         </div>
