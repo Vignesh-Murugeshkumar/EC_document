@@ -48,6 +48,51 @@ export default function LoginPage() {
     initSupabase();
   }, [backendUrl]);
 
+  // Listen for auth state changes (e.g. magic link redirect confirmation)
+  useEffect(() => {
+    if (!supabase) return;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_IN" && session) {
+        const pendingReg = localStorage.getItem("pending_registration");
+        if (pendingReg) {
+          try {
+            const { name, phone, plan: chosenPlan } = JSON.parse(pendingReg);
+            
+            // Synchronize profile creation in backend public.profiles table
+            const response = await fetch(`${backendUrl}/api/auth/register-profile`, {
+              method: "POST",
+              headers: { 
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${session.access_token}`
+              },
+              body: JSON.stringify({ name, phone, plan: chosenPlan }),
+            });
+
+            const data = await response.json();
+            localStorage.removeItem("pending_registration");
+            
+            if (response.ok) {
+              localStorage.setItem("ec_token", data.token);
+              localStorage.setItem("ec_user", JSON.stringify(data.user));
+              document.cookie = `ec_token=${data.token}; path=/; max-age=604800; SameSite=Lax`;
+              router.push("/dashboard");
+            } else {
+              setError(data.detail || "Failed to initialize profile after email confirmation.");
+            }
+          } catch (err) {
+            console.error("Error creating profile on redirect:", err);
+            setError(err.message || "Failed to synchronize profile. Please try logging in.");
+          }
+        }
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [supabase, backendUrl, router]);
+
 
   // Handle Login
   const handleLogin = async (e) => {
@@ -134,6 +179,9 @@ export default function LoginPage() {
     }
 
     try {
+      // Save pending registration details to localStorage to allow magic link redirects to auto-create profiles
+      localStorage.setItem("pending_registration", JSON.stringify({ name, phone, plan }));
+
       // Call Supabase native signUp which triggers confirmation email automatically
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
@@ -150,7 +198,7 @@ export default function LoginPage() {
         throw signUpError;
       }
 
-      setSuccessInfo("A 6-digit verification code has been sent to your email address. Please check your inbox (and spam folder).");
+      setSuccessInfo("Confirmation email sent! Please check your inbox. You can either click the verification link in the email, or enter the 6-digit OTP code below:");
       setAuthStep("otp");
     } catch (err) {
       setError(err.message || "Failed to submit registration request.");
@@ -158,6 +206,7 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
 
   // Handle Verify Registration OTP (using Supabase verifyOtp & backend profile sync)
   const handleVerifyRegistration = async (e) => {
@@ -413,8 +462,9 @@ export default function LoginPage() {
                     Verify Email
                   </h3>
                   <p className="font-body-md text-xs text-slate-500 leading-normal">
-                    We have sent a 6-digit verification code to <strong>{email}</strong>.
+                    Please check your inbox at <strong>{email}</strong>. You can either click the confirmation link in the email to log in automatically, or enter your 6-digit OTP code below:
                   </p>
+
                 </div>
 
                 {/* OTP Input */}
