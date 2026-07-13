@@ -244,11 +244,14 @@ export default function DashboardPage() {
             const currentDoc = await docResp.json();
             setSelectedDoc(currentDoc);
 
-            // Update step based on status
+             // Update step based on status
             const statusToStep = {
               "queued": 1,
+              "downloading": 1,
+              "converting": 1,
               "extracting": 1,
               "analysing": 2,
+              "deep_analysis": 3,
               "summarising": 3,
               "generating_report": 4,
               "complete": 5,
@@ -259,7 +262,21 @@ export default function DashboardPage() {
 
             // Add logs dynamically
             const nowStr = new Date().toLocaleTimeString();
-            if (currentDoc.status === "extracting") {
+            if (currentDoc.status === "downloading") {
+              setSystemLogs(prev => {
+                if (!prev.includes(`[${nowStr}] Downloading document from secure vault...`)) {
+                  return [...prev, `[${nowStr}] Downloading document from secure vault...`];
+                }
+                return prev;
+              });
+            } else if (currentDoc.status === "converting") {
+              setSystemLogs(prev => {
+                if (!prev.includes(`[${nowStr}] Parsing document format and converting to Markdown...`)) {
+                  return [...prev, `[${nowStr}] Parsing document format and converting to Markdown...`];
+                }
+                return prev;
+              });
+            } else if (currentDoc.status === "extracting") {
               setSystemLogs(prev => {
                 if (!prev.includes(`[${nowStr}] Decrypting secure PDF text layer...`)) {
                   return [...prev, `[${nowStr}] Decrypting secure PDF text layer...`];
@@ -270,6 +287,13 @@ export default function DashboardPage() {
               setSystemLogs(prev => {
                 if (!prev.includes(`[${nowStr}] Scanning for encumbrance inconsistencies...`)) {
                   return [...prev, `[${nowStr}] Scanning for encumbrance inconsistencies...`];
+                }
+                return prev;
+              });
+            } else if (currentDoc.status === "deep_analysis") {
+              setSystemLogs(prev => {
+                if (!prev.includes(`[${nowStr}] Performing deep batch-reduce anomaly verification...`)) {
+                  return [...prev, `[${nowStr}] Performing deep batch-reduce anomaly verification...`];
                 }
                 return prev;
               });

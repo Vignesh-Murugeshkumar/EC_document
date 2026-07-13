@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS public.ec_documents (
     page_count INT NOT NULL,
     sha256_hash TEXT,
     analysis_mode TEXT DEFAULT 'auto' CHECK (analysis_mode IN ('standard', 'multi_agent', 'auto')),
-    status TEXT DEFAULT 'queued' CHECK (status IN ('queued', 'extracting', 'analysing', 'summarising', 'generating_report', 'complete', 'error')),
+    status TEXT DEFAULT 'queued' CHECK (status IN ('queued', 'downloading', 'converting', 'extracting', 'analysing', 'summarising', 'generating_report', 'deep_analysis', 'complete', 'error')),
     error_code TEXT,
     error_message TEXT,
     health_score INT,
