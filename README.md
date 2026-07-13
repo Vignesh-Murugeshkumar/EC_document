@@ -109,8 +109,6 @@ SUPABASE_JWT_SECRET=your-jwt-secret
 # OpenAI Configuration
 OPENAI_API_KEY=sk-proj-your-key
 
-# Billing Promo Code (For Hackathon/Testing Bypass)
-PROMO_CODE=VICKY100
 ```
 
 ### 2. Frontend Local Run
