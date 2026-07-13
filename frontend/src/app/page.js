@@ -128,26 +128,7 @@ export default function LoginPage() {
         router.push("/dashboard");
       }
     } catch (err) {
-      console.warn("Backend unavailable, using local quick bypass for:", email);
-      if (email.trim().lower() === "vigneshmurugeshkumar@gmail.com" && password === "Vicky@2077") {
-        const subStatus = "premium";
-        const userRole = "admin";
-        
-        const offlineUser = {
-          id: "00000000-0000-0000-0000-000000000003",
-          email: email,
-          phone: "+919840000000",
-          role: userRole,
-          subscription_status: subStatus
-        };
-        
-        localStorage.setItem("ec_token", `offline-token-${subStatus}`);
-        localStorage.setItem("ec_user", JSON.stringify(offlineUser));
-        document.cookie = `ec_token=offline-token-${subStatus}; path=/; max-age=604800; SameSite=Lax`;
-        router.push("/dashboard");
-      } else {
-        setError(err.message || "Invalid credentials.");
-      }
+      setError(err.message || "Invalid credentials.");
     } finally {
       setLoading(false);
     }

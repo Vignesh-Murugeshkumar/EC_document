@@ -366,48 +366,7 @@ async def test_login(req: TestLoginRequest, request: Request):
     email = req.email.strip().lower()
     password = req.password.strip()
     
-    # 1. Developer Admin Bypass
-    if email == "vigneshmurugeshkumar@gmail.com" and password == "Vicky@2077":
-        user_id = "00000000-0000-0000-0000-000000000003"  # System Admin UUID
-        phone = "+919840000000"
-        role = "admin"
-        sub_status = "premium"
-        
-        try:
-            prof_resp = supabase.table("profiles").select("*").eq("phone", phone).execute()
-            if prof_resp.data:
-                profile = prof_resp.data[0]
-                user_id = profile.get("id", user_id)
-                phone = profile.get("phone", phone)
-                
-                # Elevate user to admin/premium to ensure bypass
-                supabase.table("profiles").update({
-                    "role": "admin",
-                    "subscription_status": "premium"
-                }).eq("id", user_id).execute()
-        except Exception:
-            pass
-            
-        payload = {
-            "sub": user_id,
-            "phone": phone,
-            "role": role,
-            "subscription_status": sub_status,
-            "exp": int(time.time()) + 86400 * 7
-        }
-        token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
-        
-        return {
-            "token": token,
-            "user": {
-                "id": user_id,
-                "phone": phone,
-                "role": role,
-                "subscription_status": sub_status
-            }
-        }
-
-    # 2. Standard email/password login using Supabase Auth REST endpoint
+    # Standard email/password login using Supabase Auth REST endpoint
     import requests
     url = f"{SUPABASE_URL}/auth/v1/token?grant_type=password"
     headers = {
@@ -432,7 +391,7 @@ async def test_login(req: TestLoginRequest, request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Authentication server error: {str(e)}")
         
-    # 3. Retrieve user profile
+    # Retrieve user profile
     try:
         prof_resp = supabase.table("profiles").select("*").eq("id", user_id).execute()
         if not prof_resp.data:
@@ -456,7 +415,7 @@ async def test_login(req: TestLoginRequest, request: Request):
         role = "user"
         sub_status = "free"
         
-    # 4. Sign custom backend JWT token
+    # Sign custom backend JWT token
     payload_jwt = {
         "sub": user_id,
         "phone": phone,
