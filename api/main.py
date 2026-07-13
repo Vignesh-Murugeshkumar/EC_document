@@ -390,6 +390,89 @@ async def test_login(req: TestLoginRequest, request: Request):
 async def health_check():
     return {"status": "ok"}
 
+
+# --- Dynamic Supabase Configuration endpoint for frontend Realtime ---
+@app.get("/api/config")
+async def get_config():
+    # Generate a temporary anon JWT using the shared JWT_SECRET
+    # Realtime socket connections require a valid anon key to connect
+    payload = {
+        "role": "anon",
+        "iss": "supabase",
+        "iat": int(time.time()),
+        "exp": int(time.time()) + 86400 * 365 # 1 year expiry
+    }
+    anon_key = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    return {
+        "supabaseUrl": SUPABASE_URL,
+        "supabaseAnonKey": anon_key
+    }
+
+# --- Unified Paywall Configuration & Entitlement Layer ---
+def apply_paywall_redaction(results: Dict[str, Any], sub_tier: str) -> Dict[str, Any]:
+    """Apply paywall/tier-gating rules to analysis results.
+    
+    Free tier users only get access to the last 3 years of records.
+    All older records are redacted/masked.
+    """
+    if sub_tier == "premium" or not results:
+        return results
+        
+    redacted = results.copy()
+    current_year = 2026  # System base clock year
+    cutoff_year = current_year - 3  # last 3 years: 2024, 2025, 2026. Prior is locked.
+    
+    # Redact transactions before 2024
+    masked_transactions = []
+    for tx in redacted.get("transactions", []):
+        if tx.get("year", 2026) < cutoff_year:
+            masked_transactions.append({
+                "entry_number": tx.get("entry_number"),
+                "date": "XX-XX-XXXX",
+                "year": tx.get("year"),
+                "transaction_type": "Locked Feature",
+                "parties": [{"name": "[Upgrade to Unlock]", "role": "Seller"}, {"name": "[Upgrade to Unlock]", "role": "Buyer"}],
+                "survey_number": "XXX",
+                "property_description": "This entry details are locked under the free tier. Please upgrade to Premium plan to view history older than 3 years.",
+                "amount": "Locked"
+            })
+        else:
+            masked_transactions.append(tx)
+            
+    # Redact ownership chain before 2024
+    masked_chain = []
+    for link in redacted.get("ownership_chain", []):
+        if link.get("year", 2026) < cutoff_year:
+            masked_chain.append({
+                "transaction_id": link.get("transaction_id"),
+                "from_party": "[Locked]",
+                "to_party": "[Locked]",
+                "year": link.get("year"),
+                "status": "locked"
+            })
+        else:
+            masked_chain.append(link)
+            
+    # Redact anomalies before 2024
+    masked_anomalies = []
+    for anom in redacted.get("anomalies", []):
+        if anom.get("year", 2026) < cutoff_year:
+            masked_anomalies.append({
+                "type": anom.get("type"),
+                "severity": anom.get("severity"),
+                "year": anom.get("year"),
+                "entry_number": anom.get("entry_number"),
+                "description": "This anomaly occurred in a year outside your active range. Upgrade to Premium to see descriptions.",
+                "recommendation": "Upgrade to Premium to view detailed legal recommendation."
+            })
+        else:
+            masked_anomalies.append(anom)
+            
+    redacted["transactions"] = masked_transactions
+    redacted["ownership_chain"] = masked_chain
+    redacted["anomalies"] = masked_anomalies
+    return redacted
+
 # --- Document Endpoints ---
 
 @app.post("/api/documents/upload")
@@ -400,6 +483,7 @@ async def upload_document(
     user: Dict[str, Any] = Depends(get_user_from_token),
     request: Request = None
 ):
+    import uuid
     # 1. Enforce tier-based mode selection
     sub_tier = user.get("subscription_status", "free")
     mode_reason = ""
@@ -443,8 +527,42 @@ async def upload_document(
     if page_count > 200:
         raise HTTPException(status_code=400, detail="This document exceeds the 200-page limit. Please upload a shorter EC.")
         
+    # --- Deduplication Cache-Hit Check ---
+    try:
+        dup_resp = get_supabase().table("ec_documents").select("*").eq("owner_id", user["sub"]).eq("sha256_hash", sha256).eq("status", "complete").execute()
+        if dup_resp.data:
+            existing_doc = dup_resp.data[0]
+            doc_id = str(uuid.uuid4())
+            get_supabase().table("ec_documents").insert({
+                "id": doc_id,
+                "owner_id": user["sub"],
+                "filename": file.filename,
+                "file_size": file_size,
+                "page_count": page_count,
+                "sha256_hash": sha256,
+                "analysis_mode": mode,
+                "status": "complete",
+                "health_score": existing_doc.get("health_score"),
+                "analysis_results": existing_doc.get("analysis_results"),
+                "markdown_storage_path": existing_doc.get("markdown_storage_path"),
+                "converter_version": existing_doc.get("converter_version")
+            }).execute()
+            
+            log_audit_event(user["sub"], "upload", doc_id, {"filename": file.filename, "size": file_size, "page_count": page_count, "cached": True}, request.client.host)
+            
+            return {
+                "document_id": doc_id,
+                "status": "complete",
+                "effective_mode": mode,
+                "mode_reason": "Analysis retrieved instantly from cached document.",
+                "filename": file.filename,
+                "page_count": page_count,
+                "cached": True
+            }
+    except Exception as dup_err:
+        print(f"[DEDUPLICATION ERROR] {str(dup_err)}")
+
     # Generate unique document ID
-    import uuid
     doc_id = str(uuid.uuid4())
     
     # 5. Upload file to Supabase private storage
@@ -460,7 +578,7 @@ async def upload_document(
         
     # Insert entry into ec_documents database
     try:
-        supabase.table("ec_documents").insert({
+        get_supabase().table("ec_documents").insert({
             "id": doc_id,
             "owner_id": user["sub"],
             "filename": file.filename,
@@ -481,37 +599,25 @@ async def upload_document(
     # Log upload event
     log_audit_event(user["sub"], "upload", doc_id, {"filename": file.filename, "size": file_size, "page_count": page_count}, request.client.host)
     
-    # Generate 15-minute signed URL for Modal to fetch the file securely
+    # 6. Insert entry into the durable analysis queue instead of triggering worker directly
     try:
-        signed_url_resp = get_supabase().storage.from_("ec-documents").create_signed_url(storage_path, 900)
-        pdf_signed_url = signed_url_resp["signedURL"]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate secure processing link: {str(e)}")
-        
-    # Trigger Modal serverless worker asynchronously
-    try:
-        import modal
-        f = modal.Function.from_name("ec-validator-worker", "process_ec_document")
-        is_premium = user.get("subscription_status", "free") == "premium"
-        f.spawn(doc_id, pdf_signed_url, user["sub"], language, mode, is_premium)
-    except Exception as e:
-        print(f"[WORKER TRIGGER FAILURE] Failing analysis request: {str(e)}")
-        # Cleanup uploaded file from storage
+        get_supabase().table("ec_analysis_queue").insert({
+            "document_id": doc_id,
+            "owner_id": user["sub"],
+            "status": "pending"
+        }).execute()
+    except Exception as queue_err:
+        # Cleanup database metadata and storage on failure
+        try:
+            get_supabase().table("ec_documents").delete().eq("id", doc_id).execute()
+        except Exception:
+            pass
         try:
             get_supabase().storage.from_("ec-documents").remove([storage_path])
         except Exception:
             pass
-        # Update document status to error
-        try:
-            supabase.table("ec_documents").update({
-                "status": "error",
-                "error_code": "worker_invocation_failed",
-                "error_message": f"Worker trigger failed: {str(e)}"
-            }).eq("id", doc_id).execute()
-        except Exception:
-            pass
-        raise HTTPException(status_code=500, detail=f"Failed to trigger analysis worker: {str(e)}")
-    
+        raise HTTPException(status_code=500, detail=f"Failed to queue document for analysis: {str(queue_err)}")
+        
     return {
         "document_id": doc_id,
         "status": "queued",
@@ -547,62 +653,9 @@ async def get_document(document_id: str, user: Dict[str, Any] = Depends(get_user
     prof_resp = supabase.table("profiles").select("subscription_status").eq("id", user["sub"]).execute()
     sub_tier = prof_resp.data[0]["subscription_status"] if prof_resp.data else "free"
     
-    # Handle Free Tier Masking Constraints
-    if sub_tier == "free" and user.get("role") != "admin" and doc["status"] == "complete" and doc["analysis_results"]:
-        results = doc["analysis_results"].copy()
-        current_year = 2026 # Matches current mock system clock year
-        cutoff_year = current_year - 3 # last 3 years: 2024, 2025, 2026. Prior is blurred
-        
-        # Redact transactions before 2024
-        masked_transactions = []
-        for tx in results.get("transactions", []):
-            if tx.get("year", 2026) < cutoff_year:
-                masked_transactions.append({
-                    "entry_number": tx.get("entry_number"),
-                    "date": "XX-XX-XXXX",
-                    "year": tx.get("year"),
-                    "transaction_type": "Locked Feature",
-                    "parties": [{"name": "[Upgrade to Unlock]", "role": "Seller"}, {"name": "[Upgrade to Unlock]", "role": "Buyer"}],
-                    "survey_number": "XXX",
-                    "property_description": "This entry details are locked under the free tier. Please upgrade to Premium plan to view history older than 3 years.",
-                    "amount": "Locked"
-                })
-            else:
-                masked_transactions.append(tx)
-                
-        # Redact ownership chain before 2024
-        masked_chain = []
-        for link in results.get("ownership_chain", []):
-            if link.get("year", 2026) < cutoff_year:
-                masked_chain.append({
-                    "transaction_id": link.get("transaction_id"),
-                    "from_party": "[Locked]",
-                    "to_party": "[Locked]",
-                    "year": link.get("year"),
-                    "status": "locked"
-                })
-            else:
-                masked_chain.append(link)
-                
-        # Redact anomalies before 2024
-        masked_anomalies = []
-        for anom in results.get("anomalies", []):
-            if anom.get("year", 2026) < cutoff_year:
-                masked_anomalies.append({
-                    "type": anom.get("type"),
-                    "severity": anom.get("severity"),
-                    "year": anom.get("year"),
-                    "entry_number": anom.get("entry_number"),
-                    "description": "This anomaly occurred in a year outside your active range. Upgrade to Premium to see descriptions.",
-                    "recommendation": "Upgrade to Premium to view detailed legal recommendation."
-                })
-            else:
-                masked_anomalies.append(anom)
-                
-        results["transactions"] = masked_transactions
-        results["ownership_chain"] = masked_chain
-        results["anomalies"] = masked_anomalies
-        doc["analysis_results"] = results
+    # Handle Free Tier Masking Constraints dynamically
+    if user.get("role") != "admin" and doc["status"] == "complete" and doc["analysis_results"]:
+        doc["analysis_results"] = apply_paywall_redaction(doc["analysis_results"], sub_tier)
         
     return doc
 

@@ -1,18 +1,18 @@
 """
-EC Document Analysis Worker — Modal Labs Serverless Pipeline
+EC Document Analysis Worker - Modal Labs Serverless Pipeline
 =============================================================
 Ingests Encumbrance Certificate PDFs via Microsoft MarkItDown,
 chunks the resulting markdown, extracts transactions with OpenAI
 structured outputs, and runs a rolling batch-reduce anomaly pipeline.
 
 Key Design Decisions:
-  • Disk-buffered download (64 KB blocks) to avoid OOM on 20 MB PDFs.
-  • MarkItDown converts the PDF on-disk → flat markdown string.
-  • textwrap.wrap (6 000 chars) replaces page-based chunking since
+  - Disk-buffered download (64 KB blocks) to avoid OOM on 20 MB PDFs.
+  - MarkItDown converts the PDF on-disk -> flat markdown string.
+  - textwrap.wrap (6 000 chars) replaces page-based chunking since
     MarkItDown produces a single continuous document.
-  • Free-tier users skip chunks that contain only historical years
+  - Free-tier users skip chunks that contain only historical years
     (pre-2024) to save OpenAI tokens.
-  • Rolling batch-reduce (batches of 20 txns via gpt-4o-mini) feeds
+  - Rolling batch-reduce (batches of 20 txns via gpt-4o-mini) feeds
     into a single gpt-4o synthesis pass for the final anomaly report.
 """
 
@@ -33,7 +33,7 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 image = (
     modal.Image.debian_slim(python_version="3.11")
-    .apt_install("libxml2-dev", "libxslt-dev")
+    .apt_install("libxml2-dev", "libxslt-dev", "ffmpeg")
     .pip_install(
         "supabase",
         "langgraph",
@@ -41,6 +41,8 @@ image = (
         "markitdown[all]",
         "pydantic",
         "langdetect",
+        "pypdf",
+        "pdfplumber",
     )
 )
 
@@ -67,9 +69,31 @@ def get_openai_client():
     return OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# Pydantic Schemas  (preserved from original — shared with frontend)
-# ═══════════════════════════════════════════════════════════════════════════
+def openai_call_with_retry(client, *args, **kwargs):
+    """Call OpenAI API with exponential backoff retry.
+    
+    Tries up to 3 times, with initial delay of 1s and factor of 2.
+    """
+    import time
+    from openai import OpenAIError
+    
+    max_retries = 3
+    delay = 1.0
+    for attempt in range(max_retries):
+        try:
+            return client.beta.chat.completions.parse(*args, **kwargs)
+        except OpenAIError as e:
+            if attempt == max_retries - 1:
+                print(f"[OPENAI FAILURE] Max retries reached: {e}")
+                raise e
+            print(f"[OPENAI ERROR] Attempt {attempt + 1} failed: {e}. Retrying in {delay} seconds...")
+            time.sleep(delay)
+            delay *= 2
+
+
+# ---------------------------------------------------------------------------
+# Pydantic Schemas  (preserved from original - shared with frontend)
+# ---------------------------------------------------------------------------
 
 class Party(BaseModel):
     name: str = Field(..., description="Name of the party involved in the transaction")
@@ -126,9 +150,9 @@ class ECAnalysisReport(BaseModel):
     summary: Summary
 
 
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
 # Supabase Helpers
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
 
 def _get_supabase():
     from supabase import create_client
@@ -168,10 +192,6 @@ def log_audit(user_id: str, action: str, doc_id: str, metadata: Dict[str, Any] =
     }).execute()
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# PDF Download  — 64 KB Disk-Buffered Stream
-# ═══════════════════════════════════════════════════════════════════════════
-
 def download_to_disk(signed_url: str, dest_path: str) -> str:
     """Stream a remote file to *dest_path* in 64 KB blocks.
 
@@ -187,52 +207,133 @@ def download_to_disk(signed_url: str, dest_path: str) -> str:
     return dest_path
 
 
-# ═══════════════════════════════════════════════════════════════════════════
+def download_from_storage(storage_path: str, dest_path: str) -> str:
+    """Download a file directly from Supabase Storage using admin/service role key."""
+    try:
+        supabase_client = _get_supabase()
+        response = supabase_client.storage.from_("ec-documents").download(storage_path)
+        with open(dest_path, "wb") as out:
+            out.write(response)
+        return dest_path
+    except Exception as e:
+        raise RuntimeError(f"Failed to download PDF from storage path '{storage_path}': {e}")
+
+
+def is_pdf_scanned_check(local_path: str) -> bool:
+    """Quickly sample text from the first 3 pages of the PDF to determine if it is scanned.
+    
+    Returns True if the text length is less than 50 characters across those pages.
+    """
+    try:
+        import pypdf
+        reader = pypdf.PdfReader(local_path)
+        pages_to_check = min(3, len(reader.pages))
+        extracted_text = ""
+        for i in range(pages_to_check):
+            text = reader.pages[i].extract_text() or ""
+            extracted_text += text.strip()
+        return len(extracted_text) < 50
+    except Exception as e:
+        print(f"[SCAN PRE-CHECK WARNING] Failed to parse PDF pages: {e}")
+        return False  # Assume not scanned on exception to be safe
+
+
+def fallback_pdf_extraction(local_path: str) -> str:
+    """Fallback PDF text extraction using pdfplumber."""
+    try:
+        import pdfplumber
+        text_content = []
+        with pdfplumber.open(local_path) as pdf:
+            for i, page in enumerate(pdf.pages):
+                text = page.extract_text()
+                if text:
+                    text_content.append(text)
+        return "\n\n".join(text_content)
+    except Exception as e:
+        raise RuntimeError(f"Fallback PDF extraction failed: {e}")
+
+
+# ---------------------------------------------------------------------------
 # MarkItDown Ingestion
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
 
 def convert_pdf_to_markdown(local_path: str) -> str:
     """Convert a local PDF file to a markdown string via MarkItDown.
 
-    Raises RuntimeError if the conversion yields no useful text.
+    Falls back to pdfplumber-based extraction if MarkItDown fails.
     """
-    from markitdown import MarkItDown
+    try:
+        from markitdown import MarkItDown
+        md = MarkItDown()
+        result = md.convert(local_path)
+        if result and result.text_content and len(result.text_content.strip()) >= 50:
+            return result.text_content
+        raise RuntimeError("MarkItDown returned empty or very short text.")
+    except Exception as e:
+        print(f"[MARKITDOWN WARNING] Failed to convert PDF. Falling back to pdfplumber. Error: {e}")
+        return fallback_pdf_extraction(local_path)
 
-    md = MarkItDown()
-    result = md.convert(local_path)
-    return result.text_content
 
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
 # Semantic Character Chunking
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
 
 def chunk_text(text: str, width: int = CHUNK_SIZE_CHARS) -> List[str]:
-    """Split *text* into chunks of ≤ *width* characters.
-
-    Uses ``textwrap.wrap`` with ``break_long_words=False`` and
-    ``replace_whitespace=False`` so Markdown table pipes (``|``) and
-    column alignment are preserved.
+    """Split text into chunks of <= width characters, keeping tables intact.
+    
+    Avoids splitting in the middle of a markdown table unless the table itself exceeds the width.
     """
-    chunks = textwrap.wrap(
-        text,
-        width=width,
-        break_long_words=False,
-        replace_whitespace=False,
-    )
+    lines = text.split("\n")
+    chunks = []
+    current_chunk = []
+    current_len = 0
+    in_table = False
+    
+    for line in lines:
+        line_len = len(line) + 1  # count the newline character
+        is_table_line = line.strip().startswith("|") or (line.count("|") >= 2)
+        
+        # If adding this line exceeds the width limit
+        if current_len + line_len > width:
+            # If we are inside a table and current chunk has text, we try to avoid splitting
+            if in_table and is_table_line and current_len > 0:
+                # Only split if the table itself is already very large
+                if current_len > width * 1.5:
+                    chunks.append("\n".join(current_chunk))
+                    current_chunk = [line]
+                    current_len = line_len
+                else:
+                    # Keep appending to avoid splitting the table
+                    current_chunk.append(line)
+                    current_len += line_len
+            else:
+                # Normal split
+                if current_chunk:
+                    chunks.append("\n".join(current_chunk))
+                current_chunk = [line]
+                current_len = line_len
+        else:
+            current_chunk.append(line)
+            current_len += line_len
+            
+        in_table = is_table_line
+        
+    if current_chunk:
+        chunks.append("\n".join(current_chunk))
+        
     return chunks
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# Paywall Token Optimisation  — Year-Gated Chunk Filter
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
+# Paywall Token Optimisation - Year-Gated Chunk Filter
+# ---------------------------------------------------------------------------
 
 _HISTORICAL_YEAR_RE = re.compile(r"\b(19\d{2}|20(?:0\d|1\d|2[0-3]))\b")
 _RECENT_YEAR_RE = re.compile(r"\b(202[4-6])\b")
 
 
 def filter_chunks_for_free_tier(chunks: List[str]) -> List[str]:
-    """Drop chunks that contain *only* historical years (≤2023) and
+    """Drop chunks that contain *only* historical years (<=2023) and
     absolutely zero matches for recent active years (2024-2026).
 
     Premium users bypass this filter entirely.
@@ -247,9 +348,9 @@ def filter_chunks_for_free_tier(chunks: List[str]) -> List[str]:
     return filtered
 
 
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
 # Heuristic Transaction Count Estimator (no API call)
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
 
 def estimate_transaction_count(raw_text: str) -> int:
     """Estimates the number of transactions in an EC document using regex
@@ -270,27 +371,27 @@ def estimate_transaction_count(raw_text: str) -> int:
     return max(1, estimated)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
 # Mode Resolution
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
 
 def resolve_analysis_mode(mode: str, estimated_transaction_count: int) -> str:
     """Resolves 'auto' mode to 'standard' or 'multi_agent' based on
     document complexity.
 
     Rules:
-    - 'standard' or 'multi_agent' passed explicitly → kept as-is
-    - 'auto' + < 5 estimated transactions  → 'standard'
-    - 'auto' + >= 5 estimated transactions → 'multi_agent'
+    - 'standard' or 'multi_agent' passed explicitly -> kept as-is
+    - 'auto' + < 5 estimated transactions  -> 'standard'
+    - 'auto' + >= 5 estimated transactions -> 'multi_agent'
     """
     if mode in ("standard", "multi_agent"):
         return mode
     return "standard" if estimated_transaction_count < 5 else "multi_agent"
 
 
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
 # Chunked Transaction Extraction  (markdown-chunk aware)
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
 
 class ExtractedTransactions(BaseModel):
     transactions: List[Transaction]
@@ -326,7 +427,8 @@ EC Text Chunk:
 {chunk_text}
 """
 
-        response = client.beta.chat.completions.parse(
+        response = openai_call_with_retry(
+            client,
             model=MODEL_EXTRACT,
             messages=[
                 {"role": "system", "content": "Extract transactions from an EC document chunk rendered as markdown."},
@@ -405,12 +507,12 @@ def _deduplicate_and_sort(all_transactions: List[Dict[str, Any]]) -> List[Dict[s
     return deduplicated
 
 
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
 # Rolling Batch-Reduce Anomaly Detection
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
 
 class BatchAnomalyResult(BaseModel):
-    """Result of a single batch-reduce pass over ≤20 transactions."""
+    """Result of a single batch-reduce pass over <=20 transactions."""
     ownership_chain: List[OwnershipTransfer]
     anomalies: List[Anomaly]
     context_summary: str = Field(
@@ -466,7 +568,7 @@ INSTRUCTIONS:
    incorrect ownership transfers, inconsistent property descriptions,
    encumbrance anomalies, date anomalies).
 3. Produce a concise *context_summary* string that captures the current
-   ownership state, active encumbrances, and unresolved anomalies — this
+   ownership state, active encumbrances, and unresolved anomalies - this
    will be passed to the next batch.
 
 Guidelines for Joint/Multiple Parties:
@@ -474,7 +576,8 @@ Guidelines for Joint/Multiple Parties:
 - A transfer is valid only if all sellers were the registered owners.
 """
 
-        response = client.beta.chat.completions.parse(
+        response = openai_call_with_retry(
+            client,
             model=MODEL_REDUCE,
             messages=[
                 {"role": "system", "content": "Perform incremental EC analysis on a batch of transactions."},
@@ -524,7 +627,8 @@ YOUR TASK:
 {lang_instruction}
 """
 
-    synth_response = client.beta.chat.completions.parse(
+    synth_response = openai_call_with_retry(
+        client,
         model=MODEL_SYNTH,
         messages=[
             {"role": "system", "content": "Synthesise a comprehensive EC analysis report."},
@@ -550,9 +654,9 @@ YOUR TASK:
     }
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# Mode 1 — Standard (single-pass) Analysis
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
+# Mode 1 - Standard (single-pass) Analysis
+# ---------------------------------------------------------------------------
 
 def analyze_standard_mode(
     chunks: List[str],
@@ -593,7 +697,8 @@ Transactions:
 {json.dumps(transactions, indent=2)}
 """
 
-    response = client.beta.chat.completions.parse(
+    response = openai_call_with_retry(
+        client,
         model=MODEL_SYNTH,
         messages=[
             {"role": "system", "content": "You are a helpful property document assistant."},
@@ -616,9 +721,9 @@ Transactions:
     return report_data
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# Mode 2 — LangGraph Multi-Agent Pipeline  (now markdown-chunk aware)
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
+# Mode 2 - LangGraph Multi-Agent Pipeline  (now markdown-chunk aware)
+# ---------------------------------------------------------------------------
 
 class AgentState(TypedDict):
     raw_text: str
@@ -658,7 +763,8 @@ Transactions:
     class OwnershipChainResponse(BaseModel):
         ownership_chain: List[OwnershipTransfer]
 
-    response = client.beta.chat.completions.parse(
+    response = openai_call_with_retry(
+        client,
         model=MODEL_SYNTH,
         messages=[
             {"role": "system", "content": "Reconstruct property ownership sequence and flag title gaps."},
@@ -701,7 +807,8 @@ Ownership Chain:
     class AnomaliesResponse(BaseModel):
         anomalies: List[Anomaly]
 
-    response = client.beta.chat.completions.parse(
+    response = openai_call_with_retry(
+        client,
         model=MODEL_SYNTH,
         messages=[
             {"role": "system", "content": "Detect legal and factual anomalies in EC transactions."},
@@ -779,7 +886,8 @@ Anomalies:
         class TranslatedAnomalies(BaseModel):
             anomalies: List[Anomaly]
 
-        response = client.beta.chat.completions.parse(
+        response = openai_call_with_retry(
+            client,
             model=MODEL_SYNTH,
             messages=[
                 {"role": "system", "content": "Translate anomaly descriptions and recommendations to regional language."},
@@ -839,9 +947,9 @@ def run_langgraph_pipeline(
     }
 
 
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
 # Master Entry Point
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
 
 @app.function(
     secrets=[
@@ -852,23 +960,51 @@ def run_langgraph_pipeline(
 )
 def process_ec_document(
     doc_id: str,
-    file_path_or_url: str,
+    storage_path: str,
     user_id: str,
     target_lang: str = "en",
     mode: str = "auto",
     is_premium: bool = False,
 ):
-    """Download an EC PDF, convert to markdown via MarkItDown, chunk the
-    text, extract transactions, and run the anomaly analysis pipeline.
+    """Download an EC PDF directly from storage, run the scanned check,
+    convert to markdown, persist markdown, and run analysis.
     """
     local_path = f"/tmp/{doc_id}.pdf"
 
     try:
-        # ── 1. Stream PDF to container disk (64 KB blocks) ──────────────
+        # -- 1. Pull PDF directly from Supabase Storage ------------------
         update_db_status(doc_id, "downloading")
-        download_to_disk(file_path_or_url, local_path)
+        download_from_storage(storage_path, local_path)
 
-        # ── 2. Convert PDF → Markdown via MarkItDown ────────────────────
+        # -- 1.5. Scanned-PDF Fast Fail Check ----------------------------
+        if is_pdf_scanned_check(local_path):
+            update_db_status(
+                doc_id, "error",
+                error_code="UNSUPPORTED_PDF_TYPE",
+                error_msg=(
+                    "This PDF appears to be a scanned image lacking digital "
+                    "text vector data. The EC Analysis tool only supports "
+                    "digitally generated PDFs with a selectable text layer. "
+                    "Please obtain a digital copy from the sub-registrar's "
+                    "office and try again."
+                ),
+            )
+            log_audit(user_id, "analysis_error", doc_id, {
+                "error": "UNSUPPORTED_PDF_TYPE",
+                "message": "Extracted text below density threshold.",
+            })
+            # Fail in Queue as well
+            try:
+                _get_supabase().table("ec_analysis_queue").update({
+                    "status": "failed",
+                    "error_message": "Unsupported PDF type (scanned image).",
+                    "updated_at": "now()"
+                }).eq("document_id", doc_id).execute()
+            except Exception:
+                pass
+            return
+
+        # -- 2. Convert PDF -> Markdown via MarkItDown --------------------
         update_db_status(doc_id, "converting")
         try:
             markdown_text = convert_pdf_to_markdown(local_path)
@@ -882,49 +1018,93 @@ def process_ec_document(
                 "error": "CONVERSION_FAILED",
                 "message": str(conv_err),
             })
+            # Fail in Queue as well
+            try:
+                _get_supabase().table("ec_analysis_queue").update({
+                    "status": "failed",
+                    "error_message": f"PDF conversion failed: {conv_err}",
+                    "updated_at": "now()"
+                }).eq("document_id", doc_id).execute()
+            except Exception:
+                pass
             return
 
-        # ── 3. Text density safety check ────────────────────────────────
+        # -- 2.5. Persist Markdown Artifact and Save Version Stamp -------
+        try:
+            import markitdown
+            conv_ver = getattr(markitdown, "__version__", "unknown")
+        except Exception:
+            conv_ver = "unknown"
+            
+        markdown_storage_path = f"{user_id}/{doc_id}.md"
+        try:
+            supabase_client = _get_supabase()
+            supabase_client.storage.from_("ec-documents").upload(
+                path=markdown_storage_path,
+                file=markdown_text.encode("utf-8"),
+                file_options={"content-type": "text/markdown"}
+            )
+            supabase_client.table("ec_documents").update({
+                "markdown_storage_path": markdown_storage_path,
+                "converter_version": conv_ver
+            }).eq("id", doc_id).execute()
+        except Exception as upload_err:
+            print(f"[MARKDOWN PERSISTENCE WARNING] Failed to upload markdown or update metadata: {upload_err}")
+
+        # -- 3. Text density safety check --------------------------------
         if len(markdown_text.strip()) < MIN_TEXT_LENGTH:
             update_db_status(
                 doc_id, "error",
                 error_code="UNSUPPORTED_PDF_TYPE",
                 error_msg=(
                     "This PDF appears to be a scanned image lacking digital "
-                    "text vector data.  The EC Analysis tool only supports "
-                    "digitally generated PDFs with a selectable text layer.  "
-                    "Please obtain a digital copy from the sub-registrar's "
-                    "office and try again."
+                    "text vector data. The EC Analysis tool only supports "
+                    "digitally generated PDFs with a selectable text layer. "
+                    "Please obtain a copy with text and try again."
                 ),
             )
             log_audit(user_id, "analysis_error", doc_id, {
                 "error": "UNSUPPORTED_PDF_TYPE",
                 "message": "Extracted text below density threshold.",
             })
+            # Fail in Queue as well
+            try:
+                _get_supabase().table("ec_analysis_queue").update({
+                    "status": "failed",
+                    "error_message": "Extracted text below density threshold.",
+                    "updated_at": "now()"
+                }).eq("document_id", doc_id).execute()
+            except Exception:
+                pass
             return
 
-        # ── 4. Semantic character chunking ──────────────────────────────
+        # -- 4. Semantic structure-aware chunking -------------------------
         chunks = chunk_text(markdown_text)
 
-        # ── 5. Paywall token optimisation (free-tier year gating) ───────
-        if not is_premium:
-            chunks = filter_chunks_for_free_tier(chunks)
-
+        # -- 5. Paywall Gating has been moved to API Layer ---------
+        # Paywall date/year filtering is now applied dynamically in the API gateway response,
+        # ensuring the worker processes the full document and saves complete unredacted results.
         if not chunks:
             update_db_status(
                 doc_id, "error",
                 error_code="NO_RELEVANT_DATA",
-                error_msg=(
-                    "No recent transaction data found in this document.  "
-                    "Upgrade to Premium to analyse the full historical record."
-                ),
+                error_msg="No recent transaction data found in this document.",
             )
             log_audit(user_id, "analysis_error", doc_id, {
                 "error": "NO_RELEVANT_DATA",
             })
+            # Fail in Queue as well
+            try:
+                _get_supabase().table("ec_analysis_queue").update({
+                    "status": "failed",
+                    "error_message": "No relevant data found in document.",
+                    "updated_at": "now()"
+                }).eq("document_id", doc_id).execute()
+            except Exception:
+                pass
             return
 
-        # ── 6. Resolve analysis mode ────────────────────────────────────
+        # -- 6. Resolve analysis mode ------------------------------------
         estimated_tx_count = estimate_transaction_count(markdown_text)
         resolved_mode = resolve_analysis_mode(mode, estimated_tx_count)
 
@@ -942,7 +1122,7 @@ def process_ec_document(
             "text_length": len(markdown_text),
         })
 
-        # ── 7. Run analysis pipeline ───────────────────────────────────
+        # -- 7. Run analysis pipeline -----------------------------------
         if resolved_mode == "standard":
             update_db_status(doc_id, "analysing")
             report_data = analyze_standard_mode(chunks, target_lang)
@@ -952,21 +1132,44 @@ def process_ec_document(
                 markdown_text, chunks, doc_id, target_lang,
             )
 
-        # ── 8. Rolling Batch Reduce (if many transactions) ─────────────
+        # -- 8. Rolling Batch Reduce (if many transactions) -------------
         # If the pipeline returned > BATCH_SIZE_TXNS transactions, re-run
         # through the rolling batch-reduce for deeper anomaly detection.
         transactions = report_data.get("transactions", [])
         if len(transactions) > BATCH_SIZE_TXNS:
+            # Cap at 150 transactions to prevent runaway spend (Priority 4 Cost Cap)
+            if len(transactions) > 150:
+                print(f"[COST CONTROL] Truncating transactions from {len(transactions)} to 150 for deep analysis.")
+                transactions = transactions[:150]
+                if "anomalies" not in report_data:
+                    report_data["anomalies"] = []
+                report_data["anomalies"].append({
+                    "type": "Cost Control Restriction",
+                    "severity": "Low",
+                    "year": 2026,
+                    "entry_number": "SYSTEM",
+                    "description": "This document contains more than 150 transactions. Analysis was truncated to the first 150 entries to prevent excessive processing cost.",
+                    "recommendation": "If you require analysis of the remaining transactions, please divide the document and upload in smaller segments."
+                })
             update_db_status(doc_id, "deep_analysis")
             report_data = rolling_batch_reduce(transactions, target_lang)
 
-        # ── 9. Persist results to Supabase ──────────────────────────────
+        # -- 9. Persist results to Supabase ------------------------------
         health = report_data.get("summary", {}).get("health_score", 100)
         update_db_status(
             doc_id, "complete",
             health_score=health,
             analysis_results=report_data,
         )
+        # Update queue status to completed!
+        try:
+            _get_supabase().table("ec_analysis_queue").update({
+                "status": "completed",
+                "updated_at": "now()"
+            }).eq("document_id", doc_id).execute()
+        except Exception as q_err:
+            print(f"[QUEUE UPDATE WARNING] Failed to update queue status to completed: {q_err}")
+            
         log_audit(user_id, "analysis_complete", doc_id, {
             "health_score": health,
             "resolved_mode": resolved_mode,
@@ -980,13 +1183,122 @@ def process_ec_document(
             error_code="internal_pipeline_error",
             error_msg=err_msg,
         )
+        # Update queue status to failed!
+        try:
+            _get_supabase().table("ec_analysis_queue").update({
+                "status": "failed",
+                "error_message": err_msg,
+                "updated_at": "now()"
+            }).eq("document_id", doc_id).execute()
+        except Exception as q_err:
+            print(f"[QUEUE UPDATE WARNING] Failed to update queue status to failed: {q_err}")
+            
         log_audit(user_id, "analysis_error", doc_id, {
             "error": "internal_pipeline_error",
             "message": err_msg,
         })
 
     finally:
-        # ── Cleanup: remove the downloaded PDF from container scratch ───
+        # -- Cleanup: remove the downloaded PDF from container scratch ---
+        try:
+            Path(local_path).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Queue Processor Scheduled Task (Cron) & Stuck Job Sweeper
+# ---------------------------------------------------------------------------
+
+@app.function(
+    schedule=modal.Period(seconds=15),
+    secrets=[
+        modal.Secret.from_name("supabase-secrets"),
+    ],
+    timeout=120,
+)
+def process_analysis_queue():
+    """Periodically poll the ec_analysis_queue table for pending documents to process."""
+    import time
+    supabase_client = _get_supabase()
+    
+    # Stuck job sweeper: Mark any processing jobs older than 10 minutes (600s) as failed
+    try:
+        ten_mins_ago = time.time() - 600
+        proc_resp = supabase_client.table("ec_analysis_queue").select("*").eq("status", "processing").execute()
+        for item in proc_resp.data:
+            updated_at_str = item.get("updated_at")
+            if updated_at_str:
+                from datetime import datetime
+                try:
+                    dt = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00"))
+                    updated_ts = dt.timestamp()
+                    if updated_ts < ten_mins_ago:
+                         print(f"[STUCK JOB SWEEPER] Queue item {item['id']} has been stuck in processing for too long. Failing it.")
+                         supabase_client.table("ec_analysis_queue").update({
+                             "status": "failed",
+                             "error_message": "Analysis pipeline timeout (stuck in processing for > 10 minutes)."
+                         }).eq("id", item["id"]).execute()
+                         supabase_client.table("ec_documents").update({
+                             "status": "error",
+                             "error_code": "STUCK_PROCESSING_TIMEOUT",
+                             "error_message": "Analysis pipeline timeout (stuck in processing for > 10 minutes)."
+                         }).eq("id", item["document_id"]).execute()
+                except Exception as parse_err:
+                    print(f"[STUCK JOB SWEEPER] Error parsing date {updated_at_str}: {parse_err}")
+    except Exception as sweep_err:
+        print(f"[STUCK JOB SWEEPER ERROR] {sweep_err}")
+
+    # Pull the next pending task OR tasks that failed but have attempts < 3
+    try:
+        queue_resp = supabase_client.table("ec_analysis_queue").select("*").or_("status.eq.pending,status.eq.failed").lt("attempts", 3).order("created_at").limit(1).execute()
+        if not queue_resp.data:
+            return  # No eligible jobs
+            
+        task = queue_resp.data[0]
+        task_id = task["id"]
+        doc_id = task["document_id"]
+        owner_id = task["owner_id"]
+        
+        # Lock task by updating status to processing
+        supabase_client.table("ec_analysis_queue").update({
+            "status": "processing",
+            "attempts": task["attempts"] + 1,
+            "updated_at": "now()"
+        }).eq("id", task_id).execute()
+        
+        # Fetch document analysis mode
+        doc_resp = supabase_client.table("ec_documents").select("*").eq("id", doc_id).execute()
+        if not doc_resp.data:
+            raise RuntimeError(f"Document {doc_id} not found in ec_documents table.")
+        
+        doc = doc_resp.data[0]
+        mode = doc.get("analysis_mode", "auto")
+        
+        # Retrieve user profile subscription
+        prof_resp = supabase_client.table("profiles").select("subscription_status").eq("id", owner_id).execute()
+        is_premium = (prof_resp.data and prof_resp.data[0].get("subscription_status") == "premium")
+        
+        print(f"[QUEUE PROCESSOR] Spawning worker for document {doc_id} (mode={mode}, is_premium={is_premium})")
+        
+        storage_path = f"{owner_id}/{doc_id}.pdf"
+        process_ec_document.spawn(doc_id, storage_path, owner_id, "en", mode, is_premium)
+        
+    except Exception as e:
+        print(f"[QUEUE PROCESSOR ERROR] {e}")
+        if 'task_id' in locals():
+            try:
+                supabase_client.table("ec_analysis_queue").update({
+                    "status": "failed",
+                    "error_message": str(e)
+                }).eq("id", task_id).execute()
+                supabase_client.table("ec_documents").update({
+                    "status": "error",
+                    "error_code": "worker_spawn_failed",
+                    "error_message": f"Worker spawn failed: {str(e)}"
+                }).eq("id", doc_id).execute()
+            except Exception:
+                pass
         try:
             Path(local_path).unlink(missing_ok=True)
         except OSError:

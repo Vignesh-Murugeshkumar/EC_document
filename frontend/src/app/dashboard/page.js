@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
 import { useTranslation } from "../i18n";
 import { 
   Upload, FileText, Download, Printer, LogOut, ArrowUpRight, 
@@ -21,6 +22,7 @@ export default function DashboardPage() {
   // User session
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
+  const [supabase, setSupabase] = useState(null);
 
   // Navigation tab for mobile bottom nav / desktop view
   const [activeView, setActiveView] = useState("upload"); // 'dashboard', 'upload', 'history', 'settings'
@@ -93,6 +95,25 @@ export default function DashboardPage() {
     };
     fetchDocs();
   }, [router]);
+
+  // Dynamic initialization of Supabase Realtime Client
+  useEffect(() => {
+    const initSupabase = async () => {
+      try {
+        const res = await fetch(`${backendUrl}/api/config`);
+        if (res.ok) {
+          const config = await res.json();
+          const supabaseClient = createClient(config.supabaseUrl, config.supabaseAnonKey);
+          setSupabase(supabaseClient);
+        }
+      } catch (err) {
+        console.error("Failed to initialize Supabase Realtime client:", err);
+      }
+    };
+    if (backendUrl) {
+      initSupabase();
+    }
+  }, [backendUrl]);
 
   // Process timing countdown (simulation fallback for offline mode)
   useEffect(() => {
@@ -232,120 +253,252 @@ export default function DashboardPage() {
       };
       setSelectedDoc(initialDoc);
 
-      // Start Polling the backend for status updates
-      let pollCount = 0;
-      const pollInterval = setInterval(async () => {
-        pollCount++;
-        try {
-          const docResp = await fetch(`${backendUrl}/api/documents/${docId}`, {
-            headers: { "Authorization": `Bearer ${token}` }
-          });
-          if (docResp.ok) {
-            const currentDoc = await docResp.json();
-            setSelectedDoc(currentDoc);
-
-             // Update step based on status
-            const statusToStep = {
-              "queued": 1,
-              "downloading": 1,
-              "converting": 1,
-              "extracting": 1,
-              "analysing": 2,
-              "deep_analysis": 3,
-              "summarising": 3,
-              "generating_report": 4,
-              "complete": 5,
-              "error": 5
-            };
-            const step = statusToStep[currentDoc.status] || 1;
-            setProcessingStep(step);
-
-            // Add logs dynamically
-            const nowStr = new Date().toLocaleTimeString();
-            if (currentDoc.status === "downloading") {
-              setSystemLogs(prev => {
-                if (!prev.includes(`[${nowStr}] Downloading document from secure vault...`)) {
-                  return [...prev, `[${nowStr}] Downloading document from secure vault...`];
+      // Use Supabase Realtime for state-sync; fallback to HTTP polling if not loaded
+      if (supabase) {
+        supabase.realtime.setAuth(token);
+        const channel = supabase
+          .channel(`document-status-${docId}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "UPDATE",
+              schema: "public",
+              table: "ec_documents",
+              filter: `id=eq.${docId}`,
+            },
+            async (payload) => {
+              const currentDoc = payload.new;
+              
+              // If status is complete or error, retrieve the full payload from the gateway (enforcing paywall/redaction)
+              if (currentDoc.status === "complete" || currentDoc.status === "error") {
+                supabase.removeChannel(channel);
+                if (currentDoc.status === "complete") {
+                  try {
+                    const docDetailResp = await fetch(`${backendUrl}/api/documents/${docId}`, {
+                      headers: { "Authorization": `Bearer ${token}` }
+                    });
+                    if (docDetailResp.ok) {
+                      const detailedDoc = await docDetailResp.json();
+                      setSelectedDoc(detailedDoc);
+                      
+                      const listResp = await fetch(`${backendUrl}/api/documents`, {
+                        headers: { "Authorization": `Bearer ${token}` }
+                      });
+                      if (listResp.ok) {
+                        const listData = await listResp.json();
+                        setDocuments(listData);
+                      } else {
+                        setDocuments(prev => [detailedDoc, ...prev.filter(d => d.id !== docId)]);
+                      }
+                    } else {
+                      setSelectedDoc(currentDoc);
+                      setDocuments(prev => [currentDoc, ...prev.filter(d => d.id !== docId)]);
+                    }
+                  } catch (err) {
+                    console.error("Error fetching completed document detail:", err);
+                    setSelectedDoc(currentDoc);
+                    setDocuments(prev => [currentDoc, ...prev.filter(d => d.id !== docId)]);
+                  }
+                  setUploading(false);
+                  setActiveView("dashboard");
+                } else {
+                  setUploading(false);
+                  alert(`Analysis Failed: ${currentDoc.error_message || "Unknown error occurred"}`);
+                  setSelectedDoc(null);
                 }
-                return prev;
-              });
-            } else if (currentDoc.status === "converting") {
-              setSystemLogs(prev => {
-                if (!prev.includes(`[${nowStr}] Parsing document format and converting to Markdown...`)) {
-                  return [...prev, `[${nowStr}] Parsing document format and converting to Markdown...`];
-                }
-                return prev;
-              });
-            } else if (currentDoc.status === "extracting") {
-              setSystemLogs(prev => {
-                if (!prev.includes(`[${nowStr}] Decrypting secure PDF text layer...`)) {
-                  return [...prev, `[${nowStr}] Decrypting secure PDF text layer...`];
-                }
-                return prev;
-              });
-            } else if (currentDoc.status === "analysing") {
-              setSystemLogs(prev => {
-                if (!prev.includes(`[${nowStr}] Scanning for encumbrance inconsistencies...`)) {
-                  return [...prev, `[${nowStr}] Scanning for encumbrance inconsistencies...`];
-                }
-                return prev;
-              });
-            } else if (currentDoc.status === "deep_analysis") {
-              setSystemLogs(prev => {
-                if (!prev.includes(`[${nowStr}] Performing deep batch-reduce anomaly verification...`)) {
-                  return [...prev, `[${nowStr}] Performing deep batch-reduce anomaly verification...`];
-                }
-                return prev;
-              });
-            } else if (currentDoc.status === "summarising") {
-              setSystemLogs(prev => {
-                if (!prev.includes(`[${nowStr}] Cataloging survey numbers (104/A, 104/B)...`)) {
-                  return [...prev, `[${nowStr}] Cataloging survey numbers (104/A, 104/B)...`];
-                }
-                return prev;
-              });
-            } else if (currentDoc.status === "generating_report") {
-              setSystemLogs(prev => {
-                if (!prev.includes(`[${nowStr}] Constructing PDF analysis report summary...`)) {
-                  return [...prev, `[${nowStr}] Constructing PDF analysis report summary...`];
-                }
-                return prev;
-              });
-            }
-
-            if (currentDoc.status === "complete") {
-              clearInterval(pollInterval);
-              // Fetch latest document list to refresh history
-              const listResp = await fetch(`${backendUrl}/api/documents`, {
-                headers: { "Authorization": `Bearer ${token}` }
-              });
-              if (listResp.ok) {
-                const listData = await listResp.json();
-                setDocuments(listData);
-              } else {
-                setDocuments(prev => [currentDoc, ...prev.filter(d => d.id !== docId)]);
+                return;
               }
-              setUploading(false);
-              setActiveView("dashboard");
-            } else if (currentDoc.status === "error") {
-              clearInterval(pollInterval);
-              setUploading(false);
-              alert(`Analysis Failed: ${currentDoc.error_message || "Unknown error occurred"}`);
-              setSelectedDoc(null);
-            }
-          }
-        } catch (pollErr) {
-          console.warn("Polling error:", pollErr);
-        }
 
-        // Safeguard timeout (10 minutes / 600 seconds)
-        if (pollCount > 300) {
-          clearInterval(pollInterval);
+              // Update processing status and step
+              setSelectedDoc(currentDoc);
+              const statusToStep = {
+                "queued": 1,
+                "downloading": 1,
+                "converting": 1,
+                "extracting": 1,
+                "analysing": 2,
+                "deep_analysis": 3,
+                "summarising": 3,
+                "generating_report": 4
+              };
+              const step = statusToStep[currentDoc.status] || 1;
+              setProcessingStep(step);
+
+              // Add logs dynamically
+              const nowStr = new Date().toLocaleTimeString();
+              if (currentDoc.status === "downloading") {
+                setSystemLogs(prev => {
+                  if (!prev.includes(`[${nowStr}] Downloading document from secure vault...`)) {
+                    return [...prev, `[${nowStr}] Downloading document from secure vault...`];
+                  }
+                  return prev;
+                });
+              } else if (currentDoc.status === "converting") {
+                setSystemLogs(prev => {
+                  if (!prev.includes(`[${nowStr}] Parsing document format and converting to Markdown...`)) {
+                    return [...prev, `[${nowStr}] Parsing document format and converting to Markdown...`];
+                  }
+                  return prev;
+                });
+              } else if (currentDoc.status === "extracting") {
+                setSystemLogs(prev => {
+                  if (!prev.includes(`[${nowStr}] Decrypting secure PDF text layer...`)) {
+                    return [...prev, `[${nowStr}] Decrypting secure PDF text layer...`];
+                  }
+                  return prev;
+                });
+              } else if (currentDoc.status === "analysing") {
+                setSystemLogs(prev => {
+                  if (!prev.includes(`[${nowStr}] Scanning for encumbrance inconsistencies...`)) {
+                    return [...prev, `[${nowStr}] Scanning for encumbrance inconsistencies...`];
+                  }
+                  return prev;
+                });
+              } else if (currentDoc.status === "deep_analysis") {
+                setSystemLogs(prev => {
+                  if (!prev.includes(`[${nowStr}] Performing deep batch-reduce anomaly verification...`)) {
+                    return [...prev, `[${nowStr}] Performing deep batch-reduce anomaly verification...`];
+                  }
+                  return prev;
+                });
+              } else if (currentDoc.status === "summarising") {
+                setSystemLogs(prev => {
+                  if (!prev.includes(`[${nowStr}] Cataloging survey numbers (104/A, 104/B)...`)) {
+                    return [...prev, `[${nowStr}] Cataloging survey numbers (104/A, 104/B)...`];
+                  }
+                  return prev;
+                });
+              } else if (currentDoc.status === "generating_report") {
+                setSystemLogs(prev => {
+                  if (!prev.includes(`[${nowStr}] Constructing PDF analysis report summary...`)) {
+                    return [...prev, `[${nowStr}] Constructing PDF analysis report summary...`];
+                  }
+                  return prev;
+                });
+              }
+            }
+          )
+          .subscribe();
+
+        // Safe cleanup timeout: if not completed within 10 minutes, unsubscribe and alert
+        setTimeout(() => {
+          supabase.removeChannel(channel);
           setUploading(false);
           alert("Analysis timed out. Please check recent history or retry.");
           setSelectedDoc(null);
-        }
-      }, 2000);
+        }, 600000);
+      } else {
+        // Fallback: poll the gateway every 2 seconds
+        let pollCount = 0;
+        const pollInterval = setInterval(async () => {
+          pollCount++;
+          try {
+            const docResp = await fetch(`${backendUrl}/api/documents/${docId}`, {
+              headers: { "Authorization": `Bearer ${token}` }
+            });
+            if (docResp.ok) {
+              const currentDoc = await docResp.json();
+              setSelectedDoc(currentDoc);
+
+              const statusToStep = {
+                "queued": 1,
+                "downloading": 1,
+                "converting": 1,
+                "extracting": 1,
+                "analysing": 2,
+                "deep_analysis": 3,
+                "summarising": 3,
+                "generating_report": 4,
+                "complete": 5,
+                "error": 5
+              };
+              const step = statusToStep[currentDoc.status] || 1;
+              setProcessingStep(step);
+
+              const nowStr = new Date().toLocaleTimeString();
+              if (currentDoc.status === "downloading") {
+                setSystemLogs(prev => {
+                  if (!prev.includes(`[${nowStr}] Downloading document from secure vault...`)) {
+                    return [...prev, `[${nowStr}] Downloading document from secure vault...`];
+                  }
+                  return prev;
+                });
+              } else if (currentDoc.status === "converting") {
+                setSystemLogs(prev => {
+                  if (!prev.includes(`[${nowStr}] Parsing document format and converting to Markdown...`)) {
+                    return [...prev, `[${nowStr}] Parsing document format and converting to Markdown...`];
+                  }
+                  return prev;
+                });
+              } else if (currentDoc.status === "extracting") {
+                setSystemLogs(prev => {
+                  if (!prev.includes(`[${nowStr}] Decrypting secure PDF text layer...`)) {
+                    return [...prev, `[${nowStr}] Decrypting secure PDF text layer...`];
+                  }
+                  return prev;
+                });
+              } else if (currentDoc.status === "analysing") {
+                setSystemLogs(prev => {
+                  if (!prev.includes(`[${nowStr}] Scanning for encumbrance inconsistencies...`)) {
+                    return [...prev, `[${nowStr}] Scanning for encumbrance inconsistencies...`];
+                  }
+                  return prev;
+                });
+              } else if (currentDoc.status === "deep_analysis") {
+                setSystemLogs(prev => {
+                  if (!prev.includes(`[${nowStr}] Performing deep batch-reduce anomaly verification...`)) {
+                    return [...prev, `[${nowStr}] Performing deep batch-reduce anomaly verification...`];
+                  }
+                  return prev;
+                });
+              } else if (currentDoc.status === "summarising") {
+                setSystemLogs(prev => {
+                  if (!prev.includes(`[${nowStr}] Cataloging survey numbers (104/A, 104/B)...`)) {
+                    return [...prev, `[${nowStr}] Cataloging survey numbers (104/A, 104/B)...`];
+                  }
+                  return prev;
+                });
+              } else if (currentDoc.status === "generating_report") {
+                setSystemLogs(prev => {
+                  if (!prev.includes(`[${nowStr}] Constructing PDF analysis report summary...`)) {
+                    return [...prev, `[${nowStr}] Constructing PDF analysis report summary...`];
+                  }
+                  return prev;
+                });
+              }
+
+              if (currentDoc.status === "complete") {
+                clearInterval(pollInterval);
+                const listResp = await fetch(`${backendUrl}/api/documents`, {
+                  headers: { "Authorization": `Bearer ${token}` }
+                });
+                if (listResp.ok) {
+                  const listData = await listResp.json();
+                  setDocuments(listData);
+                } else {
+                  setDocuments(prev => [currentDoc, ...prev.filter(d => d.id !== docId)]);
+                }
+                setUploading(false);
+                setActiveView("dashboard");
+              } else if (currentDoc.status === "error") {
+                clearInterval(pollInterval);
+                setUploading(false);
+                alert(`Analysis Failed: ${currentDoc.error_message || "Unknown error occurred"}`);
+                setSelectedDoc(null);
+              }
+            }
+          } catch (pollErr) {
+            console.warn("Polling error:", pollErr);
+          }
+
+          if (pollCount > 300) {
+            clearInterval(pollInterval);
+            setUploading(false);
+            alert("Analysis timed out. Please check recent history or retry.");
+            setSelectedDoc(null);
+          }
+        }, 2000);
+      }
 
     } catch (err) {
       console.error("Backend upload failed:", err);

@@ -32,12 +32,29 @@ CREATE TABLE IF NOT EXISTS public.ec_documents (
     error_message TEXT,
     health_score INT,
     analysis_results JSONB, -- Stores the structured findings (transactions, ownership_chain, anomalies, summary)
+    markdown_storage_path TEXT,
+    converter_version TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Enable RLS on EC Documents
 ALTER TABLE public.ec_documents ENABLE ROW LEVEL SECURITY;
+
+-- 2.5. Create EC Analysis Queue Table
+CREATE TABLE IF NOT EXISTS public.ec_analysis_queue (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    document_id UUID NOT NULL REFERENCES public.ec_documents(id) ON DELETE CASCADE,
+    owner_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    attempts INT NOT NULL DEFAULT 0,
+    error_message TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS on EC Analysis Queue
+ALTER TABLE public.ec_analysis_queue ENABLE ROW LEVEL SECURITY;
 
 -- 3. Create Audit Log Table
 CREATE TABLE IF NOT EXISTS public.ec_audit_log (
@@ -121,6 +138,28 @@ CREATE POLICY "Allow admins full access to audit logs"
         )
     );
 
+-- Queue Policies
+CREATE POLICY "Allow users to read their own queue items"
+    ON public.ec_analysis_queue FOR SELECT
+    USING (auth.uid() = owner_id);
+
+CREATE POLICY "Allow users to insert their own queue items"
+    ON public.ec_analysis_queue FOR INSERT
+    WITH CHECK (auth.uid() = owner_id);
+
+CREATE POLICY "Allow users to update their own queue items"
+    ON public.ec_analysis_queue FOR UPDATE
+    USING (auth.uid() = owner_id);
+
+CREATE POLICY "Allow admins full access to queue items"
+    ON public.ec_analysis_queue FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE id = auth.uid() AND role = 'admin'
+        )
+    );
+
 -- 6. Trigger to Update timestamps
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -132,4 +171,5 @@ $$ language 'plpgsql';
 
 CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 CREATE TRIGGER update_ec_documents_updated_at BEFORE UPDATE ON public.ec_documents FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+CREATE TRIGGER update_ec_analysis_queue_updated_at BEFORE UPDATE ON public.ec_analysis_queue FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
