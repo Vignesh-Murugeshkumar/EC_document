@@ -46,9 +46,12 @@ load_env()
 app = FastAPI(title="EC Analysis API", version="1.0.0")
 
 # Enable CORS for Next.js Frontend
+allowed_origins_env = os.environ.get("ALLOWED_ORIGINS", "*")
+allowed_origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()] if allowed_origins_env != "*" else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -349,7 +352,7 @@ async def verify_otp(req: OTPVerifyRequest, request: Request):
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
     
-    log_audit_event(user_id, "upload", ip_address=request.client.host, metadata={"method": "otp"})
+    log_audit_event(user_id, "login", ip_address=request.client.host, metadata={"method": "otp"})
     
     return {
         "token": token,
@@ -424,6 +427,8 @@ async def test_login(req: TestLoginRequest, request: Request):
         "exp": int(time.time()) + 86400 * 7 # 7 days expiry
     }
     token = jwt.encode(payload_jwt, JWT_SECRET, algorithm="HS256")
+    
+    log_audit_event(user_id, "login", ip_address=request.client.host if request and request.client else None, metadata={"method": "email_password"})
     
     return {
         "token": token,
@@ -658,14 +663,15 @@ def apply_paywall_redaction(results: Dict[str, Any], sub_tier: str) -> Dict[str,
     if sub_tier == "premium" or not results:
         return results
         
+    from datetime import datetime
     redacted = results.copy()
-    current_year = 2026  # System base clock year
-    cutoff_year = current_year - 3  # last 3 years: 2024, 2025, 2026. Prior is locked.
+    current_year = datetime.now().year
+    cutoff_year = current_year - 3  # last 3 years (e.g. 2024, 2025, 2026). Prior is locked.
     
-    # Redact transactions before 2024
+    # Redact transactions before cutoff_year
     masked_transactions = []
     for tx in redacted.get("transactions", []):
-        if tx.get("year", 2026) < cutoff_year:
+        if tx.get("year", current_year) < cutoff_year:
             masked_transactions.append({
                 "entry_number": tx.get("entry_number"),
                 "date": "XX-XX-XXXX",
@@ -1090,18 +1096,20 @@ async def razorpay_webhook(request: Request):
         user_id = notes.get("user_id")
         
         if not user_id:
-            # Fallback check email in profile
-            email = payment_entity.get("email")
-            if email:
-                prof_resp = supabase.table("profiles").select("id").eq("phone", email).execute()
+            # Fallback check phone/contact or email in payment entity
+            contact = payment_entity.get("contact") or payment_entity.get("phone")
+            if contact:
+                prof_resp = supabase.table("profiles").select("id").eq("phone", contact).execute()
                 if prof_resp.data:
                     user_id = prof_resp.data[0]["id"]
                     
         if user_id:
-            # Upgrade user to premium status
+            # Upgrade user to premium status with calculated ISO expiration date
+            from datetime import datetime, timedelta, timezone
+            expires_iso = (datetime.now(timezone.utc) + timedelta(days=365)).isoformat()
             supabase.table("profiles").update({
                 "subscription_status": "premium",
-                "subscription_expires_at": "now() + interval '1 year'"
+                "subscription_expires_at": expires_iso
             }).eq("id", user_id).execute()
             
             log_audit_event(user_id, "subscription_created", metadata={"payment_id": payment_entity.get("id")})

@@ -1141,12 +1141,11 @@ def process_ec_document(
             if len(transactions) > 150:
                 print(f"[COST CONTROL] Truncating transactions from {len(transactions)} to 150 for deep analysis.")
                 transactions = transactions[:150]
-                if "anomalies" not in report_data:
-                    report_data["anomalies"] = []
+                from datetime import datetime
                 report_data["anomalies"].append({
                     "type": "Cost Control Restriction",
                     "severity": "Low",
-                    "year": 2026,
+                    "year": datetime.now().year,
                     "entry_number": "SYSTEM",
                     "description": "This document contains more than 150 transactions. Analysis was truncated to the first 150 entries to prevent excessive processing cost.",
                     "recommendation": "If you require analysis of the remaining transactions, please divide the document and upload in smaller segments."
@@ -1299,7 +1298,3 @@ def process_analysis_queue():
                 }).eq("id", doc_id).execute()
             except Exception:
                 pass
-        try:
-            Path(local_path).unlink(missing_ok=True)
-        except OSError:
-            pass

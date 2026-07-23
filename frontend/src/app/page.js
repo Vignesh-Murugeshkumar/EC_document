@@ -73,9 +73,8 @@ export default function LoginPage() {
             localStorage.removeItem("pending_registration");
             
             if (response.ok) {
-              localStorage.setItem("ec_token", data.token);
-              localStorage.setItem("ec_user", JSON.stringify(data.user));
-              document.cookie = `ec_token=${data.token}; path=/; max-age=604800; SameSite=Lax`;
+              const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
+              document.cookie = `ec_token=${data.token}; path=/; max-age=604800; SameSite=Lax${isSecure ? "; Secure" : ""}`;
               router.push("/dashboard");
             } else {
               setError(data.detail || "Failed to initialize profile after email confirmation.");
@@ -118,9 +117,10 @@ export default function LoginPage() {
         throw new Error(data.detail || "Invalid email or password.");
       }
 
+      const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
       localStorage.setItem("ec_token", data.token);
       localStorage.setItem("ec_user", JSON.stringify(data.user));
-      document.cookie = `ec_token=${data.token}; path=/; max-age=604800; SameSite=Lax`;
+      document.cookie = `ec_token=${data.token}; path=/; max-age=604800; SameSite=Lax${isSecure ? "; Secure" : ""}`;
       
       if (data.user.role === "admin") {
         router.push("/admin");
@@ -240,9 +240,10 @@ export default function LoginPage() {
       }
 
       // 3. Save custom backend JWT token locally & redirect
+      const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
       localStorage.setItem("ec_token", data.token);
       localStorage.setItem("ec_user", JSON.stringify(data.user));
-      document.cookie = `ec_token=${data.token}; path=/; max-age=604800; SameSite=Lax`;
+      document.cookie = `ec_token=${data.token}; path=/; max-age=604800; SameSite=Lax${isSecure ? "; Secure" : ""}`;
       
       router.push("/dashboard");
     } catch (err) {

@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS public.ec_audit_log (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     action TEXT NOT NULL CHECK (action IN (
-        'upload', 'analysis_start', 'analysis_complete', 'analysis_error', 
+        'upload', 'login', 'analysis_start', 'analysis_complete', 'analysis_error', 
         'report_view', 'report_download', 'report_print', 
         'subscription_created', 'subscription_expired', 'account_deleted'
     )),
